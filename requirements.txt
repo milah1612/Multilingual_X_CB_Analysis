@@ -1,0 +1,27 @@
+# Core ML / DL
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+
+# Hugging Face ecosystem
+transformers==4.55.4
+datasets==2.19.1
+evaluate==0.4.1
+
+# ML utilities
+scikit-learn==1.5.0
+
+# Data handling
+pandas==2.2.2
+numpy==1.26.4
+
+# Visualization
+matplotlib==3.9.0
+seaborn==0.13.2
+
+# Text & Language
+emoji==2.12.1
+langdetect==1.0.9
+
+# App
+streamlit==1.35.0
