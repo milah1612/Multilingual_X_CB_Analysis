@@ -1,15 +1,17 @@
 import streamlit as st
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-st.title("🚨 Debugging Imports")
+st.title("🚨 Debugging Model Load")
 
-try:
-    import torch
-    st.success("✅ Torch imported successfully")
-except Exception as e:
-    st.error(f"❌ Torch import failed: {e}")
+MODEL_PATH = "Mila1612/mdeberta-cyberbullying"
 
 try:
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    st.success("✅ Transformers imported successfully")
+    st.write("⏳ Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+    st.success("✅ Tokenizer loaded")
+
+    st.write("⏳ Loading model...")
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
+    st.success("✅ Model loaded successfully")
 except Exception as e:
-    st.error(f"❌ Transformers import failed: {e}")
+    st.error(f"❌ Model load failed: {e}")
