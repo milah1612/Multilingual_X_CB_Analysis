@@ -14,9 +14,11 @@ seaborn
 plotly
 
 # Text Processing
-emoji
+emoji 
+googletrans==4.0.0-rc1
+langdetect
+
 
 sqlalchemy  # optional, for ORM style
 
-pip install googletrans==4.0.0-rc1
 
