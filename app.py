@@ -7,7 +7,8 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
 from langdetect import detect
-from googletrans import Translator
+from deep_translator import GoogleTranslator   
+
 
 # ==============================
 # DB Functions
@@ -225,18 +226,28 @@ if st.sidebar.button("Analyze Tweet"):
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Not Cyberbullying"
 
-        # Detect + Translate
-        lang, translated = detect_and_translate(tweet_input)
+        # Language detection (basic)
+        lang = "unknown"
+        if re.search(r"[اأإء-ي]", tweet_input): lang = "arabic"
+        elif re.search(r"[àâçéèêëîïôûùüÿñæœ]", tweet_input): lang = "french"
+        elif re.search(r"[а-яА-Я]", tweet_input): lang = "russian"
+        else: lang = "english"
+
+        # ✅ Translation
+        try:
+            translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
+        except Exception as e:
+            translated = f"(Translation failed: {e})"
 
         # Save to DB
-        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
+        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
 
         # Reload dataframe
         df = load_tweets()
         df_display = df.rename(columns={"eda_clean": "tweet"})
 
         st.sidebar.success(f"✅ Prediction: {sentiment}")
-        st.sidebar.write(f"🌍 Detected Language: {lang}")
+        st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}")
     else:
         st.sidebar.warning("Please enter some text.")
