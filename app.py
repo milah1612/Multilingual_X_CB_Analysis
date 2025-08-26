@@ -7,15 +7,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns 
 
 # ==============================
-# Apply Custom CSS
-# ==============================
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-local_css("style.css")   # <-- call it here
-
-# ==============================
 # Load Dataset
 # ==============================
 @st.cache_data
@@ -89,25 +80,20 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📊 Sentiment Distribution")
     sentiment_counts = df["sentiment"].value_counts()
-    fig, ax = plt.subplots(figsize=(6, 6))  # make pie chart a bit bigger too
+    fig, ax = plt.subplots(figsize=(6, 6))  # bigger pie chart
     ax.pie(sentiment_counts, labels=sentiment_counts.index, autopct="%1.1f%%")
     st.pyplot(fig)
 
 with col2:
     st.subheader("🌍 Language Distribution by Sentiment")
-
     lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
-
-    fig, ax = plt.subplots(figsize=(8, 6))  # wider for balance
+    fig, ax = plt.subplots(figsize=(8, 6))  # wider bar chart
     sns.barplot(data=lang_dist, x="language", y="count", hue="sentiment", ax=ax)
-
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontsize=10)
     ax.set_ylabel("Number of Tweets")
     ax.set_xlabel("Language")
     ax.set_title("Language Distribution by Sentiment", fontsize=12, weight="bold")
-
     st.pyplot(fig)
-
 
 st.subheader("📝 Sentiment and Processed Tweets")
 st.dataframe(df[["sentiment", "eda_clean"]].head(20))
@@ -120,14 +106,13 @@ st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
 **X CYBERBULLYING DETECTION**  
 This application detects cyberbullying in tweets across multiple languages.  
-The system supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
+It supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
 
-Enter the search term or tweet for sentiment analysis:
 """)
 
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 
-if st.sidebar.button("Analyze Tweet"): 
+if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
         # Clean
         model_cleaned = clean_for_model(tweet_input)
@@ -140,7 +125,7 @@ if st.sidebar.button("Analyze Tweet"):
         # (Stub translation - replace later with real translator)
         translated = f"[English Translation Placeholder] {eda_cleaned}"
 
-        # Language detection (very simple - improve later)
+        # Language detection (basic)
         lang = "unknown"
         if re.search(r"[اأإء-ي]", tweet_input): lang = "arabic"
         elif re.search(r"[àâçéèêëîïôûùüÿñæœ]", tweet_input): lang = "french"
