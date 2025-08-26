@@ -2,6 +2,8 @@
 torch
 transformers
 datasets
+numpy
+pandas
 
 # App
 streamlit
@@ -10,3 +12,6 @@ streamlit
 matplotlib
 seaborn
 plotly
+
+# Text Processing
+emoji
