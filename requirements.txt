@@ -17,3 +17,5 @@ plotly
 emoji
 
 sqlalchemy  # optional, for ORM style
+
+pip install langdetect
