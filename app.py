@@ -6,7 +6,6 @@ import torch
 import matplotlib.pyplot as plt
 import seaborn as sns 
 
-
 # ==============================
 # Apply Custom CSS
 # ==============================
@@ -124,12 +123,11 @@ This application detects cyberbullying in tweets across multiple languages.
 The system supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
 
 Enter the search term or tweet for sentiment analysis:
+""")
 
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 
-
 if st.sidebar.button("Analyze Tweet"): 
-
     if tweet_input.strip():
         # Clean
         model_cleaned = clean_for_model(tweet_input)
