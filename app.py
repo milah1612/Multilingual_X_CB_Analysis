@@ -132,12 +132,39 @@ with col2:
 
 st.subheader("📝 Sentiment and Processed Tweets")
 
-# Make table wide and scrollable
+# Rename column for display
+df_display = df.rename(columns={"eda_clean": "tweet"})
+
+# --- Filters ---
+# Language filter
+languages = ["All"] + sorted(df_display["language"].unique())
+selected_lang = st.selectbox("🌍 Filter by Language", languages)
+
+# Row count filter
+rows_to_show = st.slider("📊 Number of rows to display", min_value=10, max_value=100, value=20)
+
+# --- Apply filters ---
+filtered_df = df_display.copy()
+if selected_lang != "All":
+    filtered_df = filtered_df[filtered_df["language"] == selected_lang]
+
+# --- Pagination ---
+page_size = rows_to_show
+total_pages = (len(filtered_df) // page_size) + 1
+page = st.number_input("📑 Page", min_value=1, max_value=total_pages, step=1)
+
+start_idx = (page - 1) * page_size
+end_idx = start_idx + page_size
+
+# --- Show table ---
 st.dataframe(
-    df[["language", "sentiment", "eda_clean"]].head(50),  # show more + include language
-    use_container_width=True,  # full width
-    height=400  # adjust height for visibility
+    filtered_df[["language", "sentiment", "tweet"]].iloc[start_idx:end_idx],
+    use_container_width=True,
+    height=400
 )
+
+st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
+
 
 
 # ==============================
