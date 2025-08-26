@@ -1,0 +1,37 @@
+/* ==== Dashboard Styling ==== */
+
+/* Make titles bigger & bold */
+h1, .stTitle {
+    font-size: 2.2rem !important;
+    font-weight: 700 !important;
+    color: #333333 !important;
+}
+
+/* Subheaders */
+h2, h3, .stSubheader {
+    font-size: 1.4rem !important;
+    font-weight: 600 !important;
+    color: #444444 !important;
+}
+
+/* Center charts & increase spacing */
+.css-1lcbmhc, .st-emotion-cache-ocqkz7 {  
+    gap: 40px !important;   /* spacing between columns */
+}
+
+/* Dataframe table */
+.dataframe th {
+    background-color: #f0f2f6 !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+}
+
+.dataframe td {
+    font-size: 13px !important;
+    padding: 6px !important;
+}
+
+/* Alternate row colors */
+.dataframe tr:nth-child(even) {
+    background-color: #fafafa !important;
+}
