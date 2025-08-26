@@ -4,7 +4,17 @@ import re, html
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns 
+
+
+# ==============================
+# Apply Custom CSS
+# ==============================
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+local_css("style.css")   # <-- call it here
 
 # ==============================
 # Load Dataset
@@ -106,10 +116,20 @@ st.dataframe(df[["sentiment", "eda_clean"]].head(20))
 # ==============================
 # Sidebar: Tweet Search & Prediction
 # ==============================
-st.sidebar.header("🔍 Tweet Search & Prediction")
-tweet_input = st.sidebar.text_area("Enter a tweet:")
+st.sidebar.header("🔍 X Cyberbullying Detection")
 
-if st.sidebar.button("Analyze Tweet"):
+st.sidebar.markdown("""
+**X CYBERBULLYING DETECTION**  
+This application detects cyberbullying in tweets across multiple languages.  
+The system supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
+
+Enter the search term or tweet for sentiment analysis:
+
+tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
+
+
+if st.sidebar.button("Analyze Tweet"): 
+
     if tweet_input.strip():
         # Clean
         model_cleaned = clean_for_model(tweet_input)
