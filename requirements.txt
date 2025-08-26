@@ -18,4 +18,5 @@ emoji
 
 sqlalchemy  # optional, for ORM style
 
-pip install langdetect
+pip install googletrans==4.0.0-rc1
+
