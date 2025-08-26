@@ -16,5 +16,4 @@ plotly
 # Text Processing
 emoji
 
-sqlite3  # (built into Python, no extra package needed, but good reminder)
 sqlalchemy  # optional, for ORM style
