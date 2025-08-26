@@ -74,10 +74,12 @@ def predict(text, threshold=0.35):  # default threshold = 0.35
 # ==============================
 # Dashboard Layout
 # ==============================
-st.title("🚨 Sentiment Analysis Dashboard")
+st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 
-# ---- Charts Section
-col1, col2 = st.columns(2)
+st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
+
+# ---- Charts Section (wider layout)
+col1, col2 = st.columns([1, 1.2])
 
 with col1:
     st.subheader("📊 Sentiment Distribution")
@@ -89,9 +91,17 @@ with col1:
         values="count",
         names="sentiment",
         color="sentiment",
-        color_discrete_map={"Cyberbullying": "orange", "Not Cyberbullying": "blue"}
+        height=500,  # bigger
+        color_discrete_map={
+            "Cyberbullying": "#FF6F61",
+            "Not Cyberbullying": "#4C9AFF"
+        }
     )
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+    fig_pie.update_layout(
+        legend=dict(orientation="h", y=-0.2, x=0.3),
+        font=dict(size=14)
+    )
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with col2:
@@ -105,13 +115,30 @@ with col2:
         color="sentiment",
         barmode="group",
         text="count",
-        color_discrete_map={"Cyberbullying": "orange", "Not Cyberbullying": "blue"}
+        height=500,  # match pie chart
+        color_discrete_map={
+            "Cyberbullying": "#FF6F61",
+            "Not Cyberbullying": "#4C9AFF"
+        }
     )
-    fig_bar.update_layout(xaxis_title="Language", yaxis_title="Number of Tweets")
+    fig_bar.update_layout(
+        xaxis_title="Language",
+        yaxis_title="Number of Tweets",
+        legend=dict(orientation="h", y=-0.3, x=0.3),
+        font=dict(size=14)
+    )
     st.plotly_chart(fig_bar, use_container_width=True)
 
+
 st.subheader("📝 Sentiment and Processed Tweets")
-st.dataframe(df[["sentiment", "eda_clean"]].head(20))
+
+# Make table wide and scrollable
+st.dataframe(
+    df[["language", "sentiment", "eda_clean"]].head(50),  # show more + include language
+    use_container_width=True,  # full width
+    height=400  # adjust height for visibility
+)
+
 
 # ==============================
 # Sidebar: Tweet Search & Prediction
