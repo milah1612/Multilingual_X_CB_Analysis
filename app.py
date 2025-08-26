@@ -54,13 +54,20 @@ def clean_for_eda(text):
 # ==============================
 # Prediction Function
 # ==============================
-def predict(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=256)
+def predict(text, threshold=0.35):  # default threshold = 0.35
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=256
+    )
     with torch.no_grad():
         outputs = model(**inputs)
         probs = torch.nn.functional.softmax(outputs.logits, dim=1)
-        pred = torch.argmax(probs).item()
-    return pred, probs[0][1].item()  # 1 = Cyberbullying
+        cb_prob = probs[0][1].item()  # probability of Cyberbullying
+        pred = 1 if cb_prob > threshold else 0
+    return pred, cb_prob
 
 # ==============================
 # Dashboard Layout
