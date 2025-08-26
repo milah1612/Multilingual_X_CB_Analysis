@@ -72,7 +72,7 @@ def predict(text, threshold=0.35):  # default threshold = 0.35
 # ==============================
 # Dashboard Layout
 # ==============================
-st.title("🚨 Cyberbullying Detection Dashboard")
+st.title("🚨 Sentiment Analysis Dashboard")
 
 # ---- Charts Section
 col1, col2 = st.columns(2)
@@ -80,21 +80,25 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📊 Sentiment Distribution")
     sentiment_counts = df["sentiment"].value_counts()
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(6, 6))  # make pie chart a bit bigger too
     ax.pie(sentiment_counts, labels=sentiment_counts.index, autopct="%1.1f%%")
     st.pyplot(fig)
 
 with col2:
     st.subheader("🌍 Language Distribution by Sentiment")
+
     lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
 
-    fig = plt.figure(figsize=(8, 5))
-    sns.barplot(data=lang_dist, x="language", y="count", hue="sentiment")
-    plt.xticks(rotation=45)
-    plt.ylabel("Number of Tweets")
-    plt.xlabel("Language")
-    plt.title("Language Distribution by Sentiment")
+    fig, ax = plt.subplots(figsize=(8, 6))  # wider for balance
+    sns.barplot(data=lang_dist, x="language", y="count", hue="sentiment", ax=ax)
+
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontsize=10)
+    ax.set_ylabel("Number of Tweets")
+    ax.set_xlabel("Language")
+    ax.set_title("Language Distribution by Sentiment", fontsize=12, weight="bold")
+
     st.pyplot(fig)
+
 
 st.subheader("📝 Sentiment and Processed Tweets")
 st.dataframe(df[["sentiment", "eda_clean"]].head(20))
