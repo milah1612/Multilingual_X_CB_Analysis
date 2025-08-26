@@ -9,7 +9,6 @@ import plotly.express as px
 from langdetect import detect
 from deep_translator import GoogleTranslator   
 
-
 # ==============================
 # DB Functions
 # ==============================
@@ -122,22 +121,6 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Translator
-# ==============================
-translator = Translator()
-
-def detect_and_translate(text):
-    try:
-        lang = detect(text)
-    except:
-        lang = "unknown"
-    try:
-        translated = translator.translate(text, dest="en").text
-    except:
-        translated = "[translation error]"
-    return lang, translated
-
-# ==============================
 # Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
@@ -226,12 +209,11 @@ if st.sidebar.button("Analyze Tweet"):
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Not Cyberbullying"
 
-        # Language detection (basic)
-        lang = "unknown"
-        if re.search(r"[اأإء-ي]", tweet_input): lang = "arabic"
-        elif re.search(r"[àâçéèêëîïôûùüÿñæœ]", tweet_input): lang = "french"
-        elif re.search(r"[а-яА-Я]", tweet_input): lang = "russian"
-        else: lang = "english"
+        # Language detection
+        try:
+            lang = detect(tweet_input)
+        except:
+            lang = "unknown"
 
         # ✅ Translation
         try:
@@ -239,8 +221,8 @@ if st.sidebar.button("Analyze Tweet"):
         except Exception as e:
             translated = f"(Translation failed: {e})"
 
-        # Save to DB
-        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
+        # Save to DB (now includes translation!)
+        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
 
         # Reload dataframe
         df = load_tweets()
