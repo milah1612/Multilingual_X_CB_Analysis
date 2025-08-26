@@ -79,21 +79,34 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📊 Sentiment Distribution")
-    sentiment_counts = df["sentiment"].value_counts()
-    fig, ax = plt.subplots(figsize=(6, 6))  # bigger pie chart
-    ax.pie(sentiment_counts, labels=sentiment_counts.index, autopct="%1.1f%%")
-    st.pyplot(fig)
+    sentiment_counts = df["sentiment"].value_counts().reset_index()
+    sentiment_counts.columns = ["sentiment", "count"]
+
+    fig_pie = px.pie(
+        sentiment_counts,
+        values="count",
+        names="sentiment",
+        color="sentiment",
+        color_discrete_map={"Cyberbullying": "orange", "Not Cyberbullying": "blue"}
+    )
+    fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+    st.plotly_chart(fig_pie, use_container_width=True)
 
 with col2:
     st.subheader("🌍 Language Distribution by Sentiment")
     lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
-    fig, ax = plt.subplots(figsize=(8, 6))  # wider bar chart
-    sns.barplot(data=lang_dist, x="language", y="count", hue="sentiment", ax=ax)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontsize=10)
-    ax.set_ylabel("Number of Tweets")
-    ax.set_xlabel("Language")
-    ax.set_title("Language Distribution by Sentiment", fontsize=12, weight="bold")
-    st.pyplot(fig)
+
+    fig_bar = px.bar(
+        lang_dist,
+        x="language",
+        y="count",
+        color="sentiment",
+        barmode="group",
+        text="count",
+        color_discrete_map={"Cyberbullying": "orange", "Not Cyberbullying": "blue"}
+    )
+    fig_bar.update_layout(xaxis_title="Language", yaxis_title="Number of Tweets")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 st.subheader("📝 Sentiment and Processed Tweets")
 st.dataframe(df[["sentiment", "eda_clean"]].head(20))
