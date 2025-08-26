@@ -6,6 +6,8 @@ from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
+from langdetect import detect
+from googletrans import Translator
 
 # ==============================
 # DB Functions
@@ -25,6 +27,7 @@ def init_db():
             sentiment TEXT,
             model_clean TEXT,
             eda_clean TEXT,
+            translated_tweet TEXT,
             timestamp TEXT
         )
     """)
@@ -42,6 +45,7 @@ def migrate_csv_to_sqlite():
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
         df["timestamp"] = datetime.now().isoformat()
+        df["translated_tweet"] = "[not translated]"  # default
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
@@ -53,13 +57,13 @@ def load_tweets():
     conn.close()
     return df
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean):
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment, model_clean, eda_clean, datetime.now().isoformat()))
+        INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
@@ -115,6 +119,22 @@ def predict(text, threshold=0.35):
         cb_prob = probs[0][1].item()
         pred = 1 if cb_prob > threshold else 0
     return pred, cb_prob
+
+# ==============================
+# Translator
+# ==============================
+translator = Translator()
+
+def detect_and_translate(text):
+    try:
+        lang = detect(text)
+    except:
+        lang = "unknown"
+    try:
+        translated = translator.translate(text, dest="en").text
+    except:
+        translated = "[translation error]"
+    return lang, translated
 
 # ==============================
 # Dashboard Layout
@@ -179,7 +199,7 @@ page = st.number_input("📑 Page", min_value=1, max_value=total_pages, step=1)
 start_idx = (page - 1) * page_size
 end_idx = start_idx + page_size
 
-st.dataframe(filtered_df[["language", "sentiment", "tweet"]].iloc[start_idx:end_idx],
+st.dataframe(filtered_df[["language", "sentiment", "tweet", "translated_tweet"]].iloc[start_idx:end_idx],
              use_container_width=True, height=400)
 
 st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
@@ -205,22 +225,18 @@ if st.sidebar.button("Analyze Tweet"):
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Not Cyberbullying"
 
-        # Language detection (basic)
-        lang = "unknown"
-        if re.search(r"[اأإء-ي]", tweet_input): lang = "arabic"
-        elif re.search(r"[àâçéèêëîïôûùüÿñæœ]", tweet_input): lang = "french"
-        elif re.search(r"[а-яА-Я]", tweet_input): lang = "russian"
-        else: lang = "english"
+        # Detect + Translate
+        lang, translated = detect_and_translate(tweet_input)
 
         # Save to DB
-        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
+        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
 
         # Reload dataframe
         df = load_tweets()
         df_display = df.rename(columns={"eda_clean": "tweet"})
 
         st.sidebar.success(f"✅ Prediction: {sentiment}")
-        st.sidebar.write(f"🌍 Language: {lang}")
-        st.sidebar.write(f"🌐 Translated: [English Placeholder] {eda_cleaned}")
+        st.sidebar.write(f"🌍 Detected Language: {lang}")
+        st.sidebar.write(f"🌐 Translated: {translated}")
     else:
         st.sidebar.warning("Please enter some text.")
