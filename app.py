@@ -85,11 +85,15 @@ with col1:
     st.pyplot(fig)
 
 with col2:
-    st.subheader("🌍 Language Distribution")
-    lang_counts = df["language"].value_counts()
-    fig, ax = plt.subplots()
-    sns.barplot(x=lang_counts.index, y=lang_counts.values, ax=ax, color="skyblue")
+    st.subheader("🌍 Language Distribution by Sentiment")
+    lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
+
+    fig = plt.figure(figsize=(8, 5))
+    sns.barplot(data=lang_dist, x="language", y="count", hue="sentiment")
     plt.xticks(rotation=45)
+    plt.ylabel("Number of Tweets")
+    plt.xlabel("Language")
+    plt.title("Language Distribution by Sentiment")
     st.pyplot(fig)
 
 st.subheader("📝 Sentiment and Processed Tweets")
