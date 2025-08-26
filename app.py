@@ -45,7 +45,7 @@ def migrate_csv_to_sqlite():
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
         df["timestamp"] = datetime.now().isoformat()
-        df["translated_tweet"] = "[not translated]"  # default
+        df["translated_tweet"] = "[not translated]"  # default placeholder
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
@@ -209,19 +209,17 @@ if st.sidebar.button("Analyze Tweet"):
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Not Cyberbullying"
 
-        # Language detection
+        # Language detect + translation
         try:
             lang = detect(tweet_input)
         except:
             lang = "unknown"
-
-        # ✅ Translation
         try:
             translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
         except Exception as e:
             translated = f"(Translation failed: {e})"
 
-        # Save to DB (now includes translation!)
+        # ✅ Save to DB with translated_tweet
         insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
 
         # Reload dataframe
@@ -230,6 +228,8 @@ if st.sidebar.button("Analyze Tweet"):
 
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
-        st.sidebar.write(f"🌐 Translated: {translated}")
+        st.sidebar.write(f"🌐 Translated: {translated}") 
+
+        st.experimental_rerun()
     else:
         st.sidebar.warning("Please enter some text.")
