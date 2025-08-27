@@ -162,67 +162,68 @@ def predict(text, threshold=0.35):
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
 
-# ---- Charts Section
-col1, col2 = st.columns([1, 1.2])
+def render_dashboard(df):
+    # ---- Charts Section
+    col1, col2 = st.columns([1, 1.2])
 
-with col1:
-    st.subheader("📊 Sentiment Distribution")
-    sentiment_counts = df["sentiment"].value_counts().reset_index()
-    sentiment_counts.columns = ["sentiment", "count"]
+    with col1:
+        st.subheader("📊 Sentiment Distribution")
+        sentiment_counts = df["sentiment"].value_counts().reset_index()
+        sentiment_counts.columns = ["sentiment", "count"]
 
-    fig_pie = px.pie(
-        sentiment_counts,
-        values="count",
-        names="sentiment",
-        color="sentiment",
-        height=500,
-        color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
-    )
-    fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(fig_pie, use_container_width=True)
+        fig_pie = px.pie(
+            sentiment_counts,
+            values="count",
+            names="sentiment",
+            color="sentiment",
+            height=500,
+            color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
+        )
+        fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-with col2:
-    st.subheader("🌍 Language Distribution by Sentiment")
-    lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
+    with col2:
+        st.subheader("🌍 Language Distribution by Sentiment")
+        lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
 
-    fig_bar = px.bar(
-        lang_dist,
-        x="language",
-        y="count",
-        color="sentiment",
-        barmode="group",
-        text="count",
-        height=500,
-        color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
+        fig_bar = px.bar(
+            lang_dist,
+            x="language",
+            y="count",
+            color="sentiment",
+            barmode="group",
+            text="count",
+            height=500,
+            color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-# ==============================
-# Tweets Table
-# ==============================
-st.subheader("📝 Sentiment and Processed Tweets")
-df_display = df.rename(columns={"eda_clean": "tweet"})
+    # ==============================
+    # Tweets Table
+    # ==============================
+    st.subheader("📝 Sentiment and Processed Tweets")
+    df_display = df.rename(columns={"eda_clean": "tweet"})
 
-# Filters
-languages = ["All"] + sorted(df_display["language"].dropna().unique())
-selected_lang = st.selectbox("🌍 Filter by Language", languages)
-rows_to_show = st.slider("📊 Number of rows to display", 10, 100, 20)
+    # Filters
+    languages = ["All"] + sorted(df_display["language"].dropna().unique())
+    selected_lang = st.selectbox("🌍 Filter by Language", languages)
+    rows_to_show = st.slider("📊 Number of rows to display", 10, 100, 20)
 
-filtered_df = df_display.copy()
-if selected_lang != "All":
-    filtered_df = filtered_df[filtered_df["language"] == selected_lang]
+    filtered_df = df_display.copy()
+    if selected_lang != "All":
+        filtered_df = filtered_df[filtered_df["language"] == selected_lang]
 
-page_size = rows_to_show
-total_pages = (len(filtered_df) // page_size) + 1
-page = st.number_input("📑 Page", min_value=1, max_value=total_pages, step=1)
+    page_size = rows_to_show
+    total_pages = (len(filtered_df) // page_size) + 1
+    page = st.number_input("📑 Page", min_value=1, max_value=total_pages, step=1)
 
-start_idx = (page - 1) * page_size
-end_idx = start_idx + page_size
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
 
-st.dataframe(filtered_df[["language", "sentiment", "tweet", "translated_tweet"]].iloc[start_idx:end_idx],
-             use_container_width=True, height=400)
+    st.dataframe(filtered_df[["language", "sentiment", "tweet", "translated_tweet"]].iloc[start_idx:end_idx],
+                 use_container_width=True, height=400)
 
-st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
+    st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
 
 # ==============================
 # Sidebar: Tweet Search
