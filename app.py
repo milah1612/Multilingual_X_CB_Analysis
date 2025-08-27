@@ -50,19 +50,27 @@ def init_db():
     conn.close()
 
 def migrate_csv_to_sqlite():
-    """Migrate CSV into SQLite only if DB file doesn't exist"""
-    if not os.path.exists(DB_FILE):  # ✅ check if DB file exists
-        if os.path.exists(CSV_FILE):
-            df = pd.read_csv(CSV_FILE)
-            df["timestamp"] = datetime.now().isoformat()
-            df["translated_tweet"] = "[not translated]"  # default placeholder
+    """Migrate CSV into SQLite if DB is empty"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
 
-            conn = sqlite3.connect(DB_FILE)
-            df.to_sql("tweets", conn, if_exists="replace", index=False)  # init once
-            conn.close()
-            print("✅ Migrated CSV into SQLite")
-        else:
-            print("⚠️ CSV file not found, starting with empty DB")
+    # Check if table has any rows
+    cursor.execute("SELECT COUNT(*) FROM tweets")
+    count = cursor.fetchone()[0]
+    conn.close()
+
+    if count == 0 and os.path.exists(CSV_FILE):
+        df = pd.read_csv(CSV_FILE)
+        df["timestamp"] = datetime.now().isoformat()
+        df["translated_tweet"] = "[not translated]"  # default placeholder
+
+        conn = sqlite3.connect(DB_FILE)
+        df.to_sql("tweets", conn, if_exists="append", index=False)
+        conn.close()
+        print("✅ Migrated CSV into SQLite (first time only)")
+    else:
+        print("➡️ DB already has data, skipping migration")
+
 
 
 def load_tweets():
