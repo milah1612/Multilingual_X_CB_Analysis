@@ -59,57 +59,27 @@ def migrate_csv_to_sqlite():
 
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
-        if "translated_tweet" not in df.columns:
-            df["translated_tweet"] = "[not translated]"
+
+        # 🚨 Remove any existing translated_tweet column
+        if "translated_tweet" in df.columns:
+            df = df.drop(columns=["translated_tweet"])
+
+        # Translate fresh
+        translated_list = []
+        for txt in df["text"].fillna(""):
+            try:
+                translated = GoogleTranslator(source="auto", target="en").translate(txt)
+            except Exception:
+                translated = "[translation error]"
+            translated_list.append(translated)
+
+        df["translated_tweet"] = translated_list
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
-        print("✅ Migrated CSV into SQLite (first time only)")
+        print("✅ Migrated CSV into SQLite with fresh translations")
     else:
         print("➡️ DB already has data, skipping migration") 
-
-def ensure_translated_column():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(tweets)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if "translated_tweet" not in columns:
-        cursor.execute("ALTER TABLE tweets ADD COLUMN translated_tweet TEXT")
-        conn.commit()
-        print("✅ Added missing 'translated_tweet' column")
-    conn.close()
-
-def translate_existing_tweets():
-    """Translate all missing tweets and update BOTH DB + CSV"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, text FROM tweets 
-        WHERE translated_tweet IS NULL OR translated_tweet='[not translated]' OR translated_tweet='None'
-    """)
-    rows = cursor.fetchall()
-
-    updated_rows = []
-    for tweet_id, text in rows:
-        try:
-            translated = GoogleTranslator(source="auto", target="en").translate(text)
-        except Exception:
-            translated = "[translation error]"
-        cursor.execute("UPDATE tweets SET translated_tweet=? WHERE id=?", (translated, tweet_id))
-        updated_rows.append((tweet_id, translated))
-
-    conn.commit()
-    conn.close()
-
-    # ✅ update CSV as well
-    if updated_rows and os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-        for tweet_id, translated in updated_rows:
-            if "translated_tweet" in df.columns:
-                df.loc[df.index == tweet_id - 1, "translated_tweet"] = translated
-        df.to_csv(CSV_FILE, index=False, encoding="utf-8")
-
-    st.sidebar.success(f"✅ Translated {len(updated_rows)} missing tweets and updated CSV")
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -117,15 +87,22 @@ def load_tweets():
     conn.close()
     return df
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet):
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean):
     timestamp = datetime.now().isoformat()
+
+    # Translate immediately
+    try:
+        translated = GoogleTranslator(source="auto", target="en").translate(text)
+    except Exception:
+        translated = "[translation error]"
+
     # --- Insert into SQLite ---
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp))
+    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated, timestamp))
     conn.commit()
     conn.close()
 
@@ -137,7 +114,7 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "sentiment": sentiment,
         "model_clean": model_clean,
         "eda_clean": eda_clean,
-        "translated_tweet": translated_tweet,
+        "translated_tweet": translated,
         "timestamp": timestamp
     }])
     if os.path.exists(CSV_FILE):
@@ -147,7 +124,6 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
 
 # Init DB and migrate if needed
 init_db()
-ensure_translated_column()
 migrate_csv_to_sqlite()
 df = load_tweets()
 
@@ -250,12 +226,6 @@ This application detects cyberbullying in tweets across multiple languages.
 Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
 """)
 
-# Sidebar Translate Button
-if st.sidebar.button("🌐 Translate Missing Tweets"):
-    translate_existing_tweets()
-    df = load_tweets()
-
-# Sidebar Input
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
@@ -268,14 +238,9 @@ if st.sidebar.button("Analyze Tweet"):
             lang = LANG_MAP.get(detected_code, detected_code)
         except:
             lang = "unknown"
-        try:
-            translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
-        except Exception as e:
-            translated = f"(Translation failed: {e})"
-        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
+        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
-        st.sidebar.write(f"🌐 Translated: {translated}")
         df = load_tweets()
     else:
         st.sidebar.warning("Please enter some text.")
