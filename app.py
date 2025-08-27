@@ -140,7 +140,7 @@ with col1:
         names="sentiment",
         color="sentiment",
         height=500,
-        color_discrete_map={"Cyberbullying": "#FF6F61", "Not Cyberbullying": "#4C9AFF"}
+        color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
     )
     fig_pie.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig_pie, use_container_width=True)
