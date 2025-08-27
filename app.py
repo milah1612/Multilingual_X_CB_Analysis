@@ -157,7 +157,7 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Dashboard Layout
+# Dashboard Rendering
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
@@ -265,6 +265,10 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}") 
 
-        st.rerun()
+        # Refresh data for dashboard
+        df = load_tweets()
     else:
         st.sidebar.warning("Please enter some text.")
+
+# ✅ Always render dashboard at the end
+render_dashboard(df)
