@@ -65,7 +65,21 @@ def migrate_csv_to_sqlite():
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
     else:
-        print("➡️ DB already has data, skipping migration")
+        print("➡️ DB already has data, skipping migration") 
+
+def ensure_translated_column():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    # check if column exists
+    cursor.execute("PRAGMA table_info(tweets)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "translated_tweet" not in columns:
+        cursor.execute("ALTER TABLE tweets ADD COLUMN translated_tweet TEXT")
+        conn.commit()
+        print("✅ Added missing 'translated_tweet' column")
+
+    conn.close()
 
 def translate_existing_tweets():
     """Translate all tweets in DB that have no translated_tweet yet."""
@@ -126,8 +140,9 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
 
 # Init DB and migrate if needed
 init_db()
+ensure_translated_column()   # ✅ ensure column exists
 migrate_csv_to_sqlite()
-translate_existing_tweets()   # ✅ NEW: translate all missing
+translate_existing_tweets()
 df = load_tweets()
 
 # ==============================
