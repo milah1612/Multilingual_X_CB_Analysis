@@ -10,6 +10,21 @@ from langdetect import detect
 from deep_translator import GoogleTranslator   
 
 # ==============================
+# Language Mapping
+# ==============================
+LANG_MAP = {
+    "ar": "arabic",
+    "fr": "french",
+    "en": "english",
+    "es": "spanish",
+    "hi": "hindi",
+    "de": "german",
+    "it": "italian",
+    "pt": "portuguese",
+    "unknown": "unknown"
+}
+
+# ==============================
 # DB Functions
 # ==============================
 DB_FILE = "tweets.db"
@@ -157,7 +172,7 @@ with col2:
         barmode="group",
         text="count",
         height=500,
-        color_discrete_map={"Cyberbullying": "#FF6F61", "Not Cyberbullying": "#4C9AFF"}
+        color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"}
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -207,13 +222,15 @@ if st.sidebar.button("Analyze Tweet"):
 
         # Predict
         label, cb_prob = predict(model_cleaned)
-        sentiment = "Cyberbullying" if label == 1 else "Not Cyberbullying"
+        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
 
-        # Language detect + translation
+        # Language detect + normalize + translation
         try:
-            lang = detect(tweet_input)
+            detected_code = detect(tweet_input)
+            lang = LANG_MAP.get(detected_code, detected_code)
         except:
             lang = "unknown"
+
         try:
             translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
         except Exception as e:
@@ -222,14 +239,10 @@ if st.sidebar.button("Analyze Tweet"):
         # ✅ Save to DB with translated_tweet
         insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
 
-        # Reload dataframe
-        df = load_tweets()
-        df_display = df.rename(columns={"eda_clean": "tweet"})
-
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}") 
 
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.sidebar.warning("Please enter some text.")
