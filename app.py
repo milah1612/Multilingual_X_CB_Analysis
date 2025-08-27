@@ -59,12 +59,34 @@ def migrate_csv_to_sqlite():
 
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
+        df["translated_tweet"] = "[not translated]"
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
     else:
         print("➡️ DB already has data, skipping migration")
+
+def translate_existing_tweets():
+    """Translate all tweets in DB that have no translated_tweet yet."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, text FROM tweets WHERE translated_tweet IS NULL OR translated_tweet='[not translated]' OR translated_tweet='None'")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        tweet_id, text = row
+        try:
+            translated = GoogleTranslator(source="auto", target="en").translate(text)
+        except Exception:
+            translated = "[translation error]"
+        
+        cursor.execute("UPDATE tweets SET translated_tweet=? WHERE id=?", (translated, tweet_id))
+
+    conn.commit()
+    conn.close()
+    print(f"✅ Translated {len(rows)} missing tweets")
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -102,10 +124,10 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     else:
         new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8")
 
-
 # Init DB and migrate if needed
 init_db()
 migrate_csv_to_sqlite()
+translate_existing_tweets()   # ✅ NEW: translate all missing
 df = load_tweets()
 
 # ==============================
@@ -157,7 +179,7 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Dashboard Rendering
+# Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
@@ -265,10 +287,8 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}") 
 
-        # Refresh data for dashboard
+        # Reload DB for charts/tables
         df = load_tweets()
-    else:
-        st.sidebar.warning("Please enter some text.")
 
-# ✅ Always render dashboard at the end
+# Render dashboard
 render_dashboard(df)
