@@ -53,25 +53,18 @@ def migrate_csv_to_sqlite():
     """Migrate CSV into SQLite if DB is empty"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-
-    # Check if table has any rows
     cursor.execute("SELECT COUNT(*) FROM tweets")
     count = cursor.fetchone()[0]
     conn.close()
 
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
-        df["timestamp"] = datetime.now().isoformat()
-        df["translated_tweet"] = "[not translated]"  # default placeholder
-
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
     else:
         print("➡️ DB already has data, skipping migration")
-
-
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -80,14 +73,35 @@ def load_tweets():
     return df
 
 def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet):
+    timestamp = datetime.now().isoformat()
+
+    # --- Insert into SQLite ---
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, datetime.now().isoformat()))
+    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp))
     conn.commit()
     conn.close()
+
+    # --- Append to CSV as backup ---
+    new_row = pd.DataFrame([{
+        "text": text,
+        "language": language,
+        "binary_label": binary_label,
+        "sentiment": sentiment,
+        "model_clean": model_clean,
+        "eda_clean": eda_clean,
+        "translated_tweet": translated_tweet,
+        "timestamp": timestamp
+    }])
+
+    if os.path.exists(CSV_FILE):
+        new_row.to_csv(CSV_FILE, mode="a", header=False, index=False, encoding="utf-8")
+    else:
+        new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8")
+
 
 # Init DB and migrate if needed
 init_db()
