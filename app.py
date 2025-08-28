@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
-import re, html
+import re, html, emoji
 import sqlite3, os
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
+from collections import Counter
+from deep_translator import GoogleTranslator
 from langdetect import detect
-from deep_translator import GoogleTranslator   
 
 # ==============================
 # Language Mapping
@@ -75,7 +76,6 @@ def load_tweets():
 
 def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet):
     timestamp = datetime.now().isoformat()
-
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
@@ -85,8 +85,8 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     conn.commit()
     conn.close()
 
-    # Update CSV as backup
     new_row = pd.DataFrame([{
+        "id": None,
         "text": text,
         "language": language,
         "binary_label": binary_label,
@@ -96,13 +96,7 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "translated_tweet": translated_tweet,
         "timestamp": timestamp
     }])
-    if os.path.exists(CSV_FILE):
-        new_row.to_csv(CSV_FILE, mode="a", header=False, index=False, encoding="utf-8-sig")
-    else:
-        new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8-sig")
-
-    return new_row  # ✅ return new row for session update
-
+    return new_row
 
 # ==============================
 # Init and Cache
@@ -111,8 +105,7 @@ init_db()
 migrate_csv_to_sqlite()
 
 if "df" not in st.session_state:
-    st.session_state.df = load_tweets()   # ✅ cache dataset
-
+    st.session_state.df = load_tweets()
 
 # ==============================
 # Load Hugging Face Model
@@ -151,7 +144,7 @@ def clean_for_eda(text):
     return text
 
 # ==============================
-# Prediction Function
+# Prediction
 # ==============================
 def predict(text, threshold=0.35):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=256)
@@ -162,79 +155,99 @@ def predict(text, threshold=0.35):
         pred = 1 if cb_prob > threshold else 0
     return pred, cb_prob
 
+# ==============================
+# Helper: Extract hashtags & emojis
+# ==============================
+def extract_hashtags(text):
+    if isinstance(text, str):
+        return re.findall(r"#\w+", text)
+    return []
+
+def extract_emojis(text):
+    return [c for c in text if c in emoji.EMOJI_DATA]
 
 # ==============================
-# Sentiment Explorer with Tabs at Top
+# Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
 
-tabs = st.tabs(["All", "Cyberbullying 🚨", "Non-Cyberbullying 🛡️"])
+tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
 
-for i, sentiment_filter in enumerate(["All", "Cyberbullying", "Non Cyberbullying"]):
-    with tabs[i]:
-        df = st.session_state.df
+# ==============================
+# All Tab
+# ==============================
+with tabs[0]:
+    df = st.session_state.df
+    col1, col2 = st.columns([1, 1.2])
+    with col1:
+        st.subheader("📊 Sentiment Distribution")
+        sentiment_counts = df["sentiment"].value_counts().reset_index()
+        sentiment_counts.columns = ["sentiment", "count"]
+        fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
+                         height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with col2:
+        st.subheader("🌍 Language Distribution by Sentiment")
+        lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
+        fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
+                         text="count", height=500,
+                         color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Filter dataset
-        if sentiment_filter == "All":
-            filtered_df = df.copy()
-        else:
-            filtered_df = df[df["sentiment"] == sentiment_filter]
+    st.subheader("📝 All Tweets")
+    st.dataframe(df[["language", "sentiment", "model_clean", "translated_tweet"]],
+                 use_container_width=True, height=400)
 
-        # ====== KPI Metrics ======
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Tweets", len(filtered_df))
-        col2.metric("Avg. Length", int(filtered_df["model_clean"].str.len().mean()))
-        col3.metric("% of Dataset", f"{len(filtered_df)/len(df)*100:.1f}%")
+# ==============================
+# Cyberbullying Tab
+# ==============================
+with tabs[1]:
+    df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
+    df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
+    df_cb["emojis"] = df_cb["eda_clean"].apply(extract_emojis)
 
-        # ====== Only show Pie + Bar in ALL ======
-        if sentiment_filter == "All":
-            col1, col2 = st.columns([1, 1.2])
-            with col1:
-                st.subheader("📊 Sentiment Distribution")
-                sentiment_counts = df["sentiment"].value_counts().reset_index()
-                sentiment_counts.columns = ["sentiment", "count"]
-                fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
-                                 height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-                fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig_pie, use_container_width=True)
+    # --- KPI Metrics
+    st.subheader("📌 Cyberbullying Insights")
+    total_cb = len(df_cb)
+    avg_len = df_cb["eda_clean"].str.len().mean()
+    perc = (total_cb / len(st.session_state.df)) * 100
+    st.metric("Total Cyberbullying Tweets", total_cb)
+    st.metric("Avg. Tweet Length", f"{avg_len:.1f}")
+    st.metric("% of Dataset", f"{perc:.1f}%")
 
-            with col2:
-                st.subheader("🌍 Language Distribution by Sentiment")
-                lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
-                fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
-                                 text="count", height=500,
-                                 color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-                st.plotly_chart(fig_bar, use_container_width=True)
+    # --- Top Words
+    words = " ".join(df_cb["eda_clean"].fillna("")).split()
+    top_words = Counter(words).most_common(10)
+    st.subheader("🔠 Top Words")
+    st.bar_chart(pd.DataFrame(top_words, columns=["word", "count"]).set_index("word"))
 
-        # ====== Table + Download ======
-        st.subheader("📝 Tweets")
-        export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
-            ["id", "language", "binary_label", "sentiment", "tweet"]
-        ]
+    # --- Top Hashtags
+    hashtags = [h for tags in df_cb["hashtags"] for h in tags]
+    top_hashtags = Counter(hashtags).most_common(10)
+    st.subheader("#️⃣ Top Hashtags")
+    st.bar_chart(pd.DataFrame(top_hashtags, columns=["hashtag", "count"]).set_index("hashtag"))
 
-        csv = export_df.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button(
-            label="⬇️ Download CSV",
-            data=csv,
-            file_name=f"{sentiment_filter.replace(' ','_').lower()}_tweets.csv",
-            mime="text/csv",
-            key=f"download_{i}"
-        )
+    # --- Top Emojis
+    emojis = [e for em in df_cb["emojis"] for e in em]
+    top_emojis = Counter(emojis).most_common(10)
+    st.subheader("😊 Top Emojis")
+    st.bar_chart(pd.DataFrame(top_emojis, columns=["emoji", "count"]).set_index("emoji"))
 
-        st.dataframe(export_df, use_container_width=True, height=400)
+    # --- Table
+    st.subheader("📋 Cyberbullying Tweets")
+    st.dataframe(df_cb[["language", "sentiment", "model_clean", "translated_tweet"]],
+                 use_container_width=True, height=400)
 
+    # --- Report Download
+    export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]]
+    csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button("⬇ Download Cyberbullying Report", csv, "cyberbullying_report.csv", "text/csv")
 
 # ==============================
 # Sidebar
 # ==============================
 st.sidebar.header("🔍 X Cyberbullying Detection")
-st.sidebar.markdown("""
-**X CYBERBULLYING DETECTION**  
-This application detects cyberbullying in tweets across multiple languages.  
-Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
-""")
-
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
@@ -249,8 +262,8 @@ if st.sidebar.button("Analyze Tweet"):
             lang = "unknown"
         try:
             translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
-        except Exception as e:
-            translated = f"(Translation failed: {e})"
+        except Exception:
+            translated = "[translation error]"
 
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
@@ -258,5 +271,3 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}")
-    else:
-        st.sidebar.warning("Please enter some text.")
