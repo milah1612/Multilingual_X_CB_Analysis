@@ -103,12 +103,13 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "language": language,
         "binary_label": binary_label,
         "sentiment": sentiment,
-        "tweet": model_clean,
+        "model_clean": model_clean,   # ✅ keep canonical
         "eda_clean": eda_clean,
         "translated_tweet": translated_tweet,
         "timestamp": timestamp
     }])
     return new_row
+
 
 # ==============================
 # Init and Cache
