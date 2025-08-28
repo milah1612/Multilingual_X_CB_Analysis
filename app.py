@@ -219,26 +219,34 @@ def render_dashboard(df):
     st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
 
     # ==============================
-    # 📥 Download Options
+    # 📥 Download (Single Button)
     # ==============================
-    st.subheader("📥 Download Report")
+    st.subheader("⬇️ Download Report")
+
     download_choice = st.radio(
         "Choose data to download:",
         ("All data", "Filtered data (based on selections)")
     )
+
     if download_choice == "All data":
         download_df = df_display
     else:
         download_df = filtered_df
 
+    # ✅ Only keep required columns
+    download_df = download_df.rename(columns={"model_clean": "tweet"})[
+        ["id", "language", "binary_label", "sentiment", "tweet"]
+    ]
+
+    # ✅ Save as Excel-friendly CSV
     csv = download_df.to_csv(index=False, encoding="utf-8-sig")
+
     st.download_button(
         label="⬇️ Download CSV",
         data=csv,
         file_name="tweet_report.csv",
         mime="text/csv",
     )
-
 
 # ==============================
 # Sidebar
