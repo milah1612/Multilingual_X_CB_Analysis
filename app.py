@@ -28,7 +28,7 @@ LANG_MAP = {
 # DB Functions
 # ==============================
 DB_FILE = "tweets.db"
-CSV_FILE = "tweet_data.csv"
+CSV_FILE = "tweet_data.csv"   # <--- remain as tweet_data.csv
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -60,24 +60,14 @@ def migrate_csv_to_sqlite():
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
 
-        # 🚨 Remove any existing translated_tweet column
-        if "translated_tweet" in df.columns:
-            df = df.drop(columns=["translated_tweet"])
+        # Ensure translated_tweet column exists
+        if "translated_tweet" not in df.columns:
+            df["translated_tweet"] = "[not translated]"
 
-        # Translate fresh
-        translated_list = []
-        for txt in df["text"].fillna(""):
-            try:
-                translated = GoogleTranslator(source="auto", target="en").translate(txt)
-            except Exception:
-                translated = "[translation error]"
-            translated_list.append(translated)
-
-        df["translated_tweet"] = translated_list
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
-        print("✅ Migrated CSV into SQLite with fresh translations")
+        print("✅ Migrated CSV into SQLite")
     else:
         print("➡️ DB already has data, skipping migration") 
 
@@ -90,7 +80,7 @@ def load_tweets():
 def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean):
     timestamp = datetime.now().isoformat()
 
-    # Translate immediately
+    # Translate immediately for new tweets
     try:
         translated = GoogleTranslator(source="auto", target="en").translate(text)
     except Exception:
@@ -106,7 +96,7 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     conn.commit()
     conn.close()
 
-    # --- Append to CSV as backup ---
+    # --- Append to CSV backup ---
     new_row = pd.DataFrame([{
         "text": text,
         "language": language,
@@ -118,9 +108,9 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "timestamp": timestamp
     }])
     if os.path.exists(CSV_FILE):
-        new_row.to_csv(CSV_FILE, mode="a", header=False, index=False, encoding="utf-8")
+        new_row.to_csv(CSV_FILE, mode="a", header=False, index=False, encoding="utf-8-sig")
     else:
-        new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8")
+        new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8-sig")
 
 # Init DB and migrate if needed
 init_db()
