@@ -283,7 +283,86 @@ with tabs[1]:
         file_name="cyberbullying_report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ) 
-    
+
+
+# ==============================
+# Non-Cyberbullying Tab
+# ==============================
+with tabs[2]:
+    df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
+    df_ncb["hashtags"] = df_ncb["text"].apply(extract_hashtags)
+
+    # --- KPI Metrics
+    st.subheader("📌 Non-Cyberbullying Insights")
+    kpi1, kpi2, kpi3 = st.columns(3)
+    total_ncb = len(df_ncb)
+    avg_len = df_ncb["eda_clean"].str.len().mean()
+    perc = (total_ncb / len(st.session_state.df)) * 100
+    kpi1.metric("Total NCB Tweets", total_ncb)
+    kpi2.metric("Avg. Tweet Length", f"{avg_len:.1f}")
+    kpi3.metric("% of Dataset", f"{perc:.1f}%")
+
+    # --- Language filter
+    languages = ["All"] + sorted(df_ncb["language"].dropna().unique())
+    selected_lang = st.selectbox("🌍 Filter by Language", languages, key="ncb_lang")
+    if selected_lang != "All":
+        df_ncb = df_ncb[df_ncb["language"] == selected_lang]
+
+    # --- NCB Distribution by Language
+    st.subheader("🌍 NCB Distribution by Language")
+    ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
+    ncb_lang_dist.columns = ["language", "count"]
+    fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
+                          text="count", height=500,
+                          color_discrete_map=LANG_COLORS)
+    st.plotly_chart(fig_ncb_lang, use_container_width=True)
+
+    # --- Distinctive Hashtags (Bubble Chart)
+    hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
+    top_hashtags = Counter(hashtags).most_common(15)
+    if top_hashtags:
+        st.subheader("#️⃣ Distinctive Hashtags")
+        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
+        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
+                                color="hashtag", hover_name="hashtag",
+                                size_max=60, height=500)
+        st.plotly_chart(fig_bubble, use_container_width=True)
+    else:
+        st.info("No hashtags found for this filter.")
+
+    # --- Hashtag Clustering (Treemap)
+    st.subheader("🧩 Hashtag Clustering (Experimental)")
+    if top_hashtags:
+        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
+                                 color="count", color_continuous_scale="Viridis",
+                                 height=500)
+        st.plotly_chart(fig_cluster, use_container_width=True)
+    else:
+        st.info("No hashtags found for clustering.")
+
+    # --- Non-Cyberbullying Tweets Table
+    st.subheader("📋 Non-Cyberbullying Tweets")
+    st.dataframe(df_ncb[["language", "sentiment", "model_clean"]].rename(
+        columns={"model_clean": "tweet"}),
+        use_container_width=True, height=400
+    )
+
+    # --- Report Download (Excel only)
+    export_df = df_ncb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
+        columns={"model_clean": "tweet"}
+    )
+
+    import io
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
+    st.download_button(
+        "⬇ Download Non-Cyberbullying Report (Excel)",
+        data=output.getvalue(),
+        file_name="non_cyberbullying_report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 
 # ==============================
 # Sidebar
