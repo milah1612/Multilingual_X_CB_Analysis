@@ -240,13 +240,14 @@ with tabs[1]:
     export_df_cb = render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
     # Excel download
-    download_cb = export_df_cb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
-    output_cb = io.BytesIO()
-    with pd.ExcelWriter(output_cb, engine="openpyxl") as writer:
-        download_cb.to_excel(writer, index=False, sheet_name="Cyberbullying")
-    st.download_button("⬇ Download Cyberbullying Report (Excel)", data=output_cb.getvalue(),
-                       file_name="cyberbullying_report.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  download_cb = export_df_cb[["language", "sentiment", "tweet"]]
+  output_cb = io.BytesIO()
+  with pd.ExcelWriter(output_cb, engine="openpyxl") as writer:
+    download_cb.to_excel(writer, index=False, sheet_name="Cyberbullying")
+  st.download_button("⬇ Download Cyberbullying Report (Excel)", data=output_cb.getvalue(),
+                   file_name="cyberbullying_report.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 # ---- Non-Cyberbullying ----
 with tabs[2]:
@@ -280,13 +281,14 @@ with tabs[2]:
     export_df_ncb = render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
     # Excel download
-    download_ncb = export_df_ncb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
-    output_ncb = io.BytesIO()
-    with pd.ExcelWriter(output_ncb, engine="openpyxl") as writer:
-        download_ncb.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
-    st.download_button("⬇ Download Non-Cyberbullying Report (Excel)", data=output_ncb.getvalue(),
-                       file_name="non_cyberbullying_report.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+ download_ncb = export_df_ncb[["language", "sentiment", "tweet"]]
+ output_ncb = io.BytesIO()
+ with pd.ExcelWriter(output_ncb, engine="openpyxl") as writer:
+    download_ncb.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
+ st.download_button("⬇ Download Non-Cyberbullying Report (Excel)", data=output_ncb.getvalue(),
+                   file_name="non_cyberbullying_report.xlsx",
+                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 # ==============================
 # Sidebar
