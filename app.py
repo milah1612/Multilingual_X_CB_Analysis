@@ -366,8 +366,15 @@ with tabs[2]:
 
 # ==============================
 # Sidebar
-# ==============================
-st.sidebar.header("🔍 X Cyberbullying Detection")
+# ============================== 
+st.sidebar.image("twitter_icon.png", use_container_width=True)  # <-- ✅ Added logo
+
+st.sidebar.header("🔍 X Cyberbullying Detection")  
+st.sidebar.markdown("""
+**X CYBERBULLYING DETECTION**  
+This application detects cyberbullying in tweets across multiple languages.  
+Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
+""")
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
