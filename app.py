@@ -289,5 +289,12 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}")
+
+        # ✅ Force rerun so charts + tables update instantly
+        st.experimental_rerun()
+
     else:
         st.sidebar.warning("Please enter some text.")
+
+
+
