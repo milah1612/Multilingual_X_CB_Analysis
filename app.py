@@ -208,7 +208,9 @@ def render_dashboard(df):
 
 # ==============================
 # Sidebar
-# ==============================
+# ============================== 
+st.sidebar.image("twitter_icon.png", use_container_width=True)  # <-- ✅ Added logo
+
 st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
 **X CYBERBULLYING DETECTION**  
