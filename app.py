@@ -188,7 +188,7 @@ def render_dashboard(df):
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.subheader("📝 Sentiment and Processed Tweets")
-    df_display = df.rename(columns={"eda_clean": "tweet"})
+    df_display = df.rename(columns={"model_clean": "tweet"})
 
     # 🌍 Language filter
     languages = ["All"] + sorted(df_display["language"].dropna().unique())
@@ -214,39 +214,33 @@ def render_dashboard(df):
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
 
-    st.dataframe(filtered_df[["language", "sentiment", "tweet", "translated_tweet"]].iloc[start_idx:end_idx],
-                 use_container_width=True, height=400)
-    st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
-
-    # ==============================
-    # 📥 Download (Single Button)
-    # ==============================
-    st.subheader("⬇️ Download Report")
-
-    download_choice = st.radio(
-        "Choose data to download:",
-        ("All data", "Filtered data (based on selections)")
-    )
-
-    if download_choice == "All data":
-        download_df = df_display
-    else:
-        download_df = filtered_df
-
-    # ✅ Only keep required columns
-    download_df = download_df.rename(columns={"model_clean": "tweet"})[
+    # ✅ Prepare exportable dataset (All vs Filtered)
+    export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
         ["id", "language", "binary_label", "sentiment", "tweet"]
     ]
 
-    # ✅ Save as Excel-friendly CSV
-    csv = download_df.to_csv(index=False, encoding="utf-8-sig")
-
-    st.download_button(
-        label="⬇️ Download CSV",
-        data=csv,
-        file_name="tweet_report.csv",
-        mime="text/csv",
+    # ✅ Show as data_editor with built-in toolbar + download button
+    st.data_editor(
+        export_df.iloc[start_idx:end_idx],
+        use_container_width=True,
+        height=400,
+        hide_index=True,
+        num_rows="fixed",
+        disabled=True,
+        key="tweet_table",
+        column_config={
+            "tweet": st.column_config.TextColumn("Tweet", width="large")
+        },
+        download_button={
+            "label": "⬇ Download CSV",
+            "data": export_df.to_csv(index=False, encoding="utf-8-sig"),
+            "file_name": "tweet_report.csv",
+            "mime": "text/csv",
+        },
     )
+
+    st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
+
 
 # ==============================
 # Sidebar
