@@ -243,10 +243,11 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}")   # <-- ✅ Added here
 
+        # ✅ Reload fresh df so charts + table update
         df = load_tweets()
+        render_dashboard(df)   # <-- refresh dashboard with new data
     else:
         st.sidebar.warning("Please enter some text.")
-
 
 # Render Dashboard
 render_dashboard(df)
