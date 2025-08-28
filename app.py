@@ -179,7 +179,7 @@ def extract_hashtags(text):
 # Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
-st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h2>", unsafe_allow_html=True)
 
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
 
