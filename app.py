@@ -162,80 +162,67 @@ def predict(text, threshold=0.35):
         pred = 1 if cb_prob > threshold else 0
     return pred, cb_prob
 
+
 # ==============================
-# Dashboard Layout
+# Sentiment Explorer with Tabs at Top
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
 
-def render_dashboard(df):
-    col1, col2 = st.columns([1, 1.2])
-    with col1:
-        st.subheader("📊 Sentiment Distribution")
-        sentiment_counts = df["sentiment"].value_counts().reset_index()
-        sentiment_counts.columns = ["sentiment", "count"]
-        fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
-                         height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-        fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-        st.plotly_chart(fig_pie, use_container_width=True)
+tabs = st.tabs(["All", "Cyberbullying 🚨", "Non-Cyberbullying 🛡️"])
 
-    with col2:
-        st.subheader("🌍 Language Distribution by Sentiment")
-        lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
-        fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
-                         text="count", height=500,
-                         color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-        st.plotly_chart(fig_bar, use_container_width=True)
+for i, sentiment_filter in enumerate(["All", "Cyberbullying", "Non Cyberbullying"]):
+    with tabs[i]:
+        df = st.session_state.df
 
+        # Filter dataset
+        if sentiment_filter == "All":
+            filtered_df = df.copy()
+        else:
+            filtered_df = df[df["sentiment"] == sentiment_filter]
 
-# ==============================
-# Sentiment Explorer Tabs
-# ==============================
-def render_sentiment_tabs(df):
-    st.markdown("---")
-    st.header("📑 Sentiment Explorer")
+        # ====== KPI Metrics ======
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Tweets", len(filtered_df))
+        col2.metric("Avg. Length", int(filtered_df["model_clean"].str.len().mean()))
+        col3.metric("% of Dataset", f"{len(filtered_df)/len(df)*100:.1f}%")
 
-    tabs = st.tabs(["All", "Cyberbullying 🚨", "Non-Cyberbullying 🛡️"])
+        # ====== Only show Pie + Bar in ALL ======
+        if sentiment_filter == "All":
+            col1, col2 = st.columns([1, 1.2])
+            with col1:
+                st.subheader("📊 Sentiment Distribution")
+                sentiment_counts = df["sentiment"].value_counts().reset_index()
+                sentiment_counts.columns = ["sentiment", "count"]
+                fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
+                                 height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
+                fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-    for i, sentiment_filter in enumerate(["All", "Cyberbullying", "Non Cyberbullying"]):
-        with tabs[i]:
-            # Filter dataset
-            if sentiment_filter == "All":
-                filtered_df = df.copy()
-            else:
-                filtered_df = df[df["sentiment"] == sentiment_filter]
+            with col2:
+                st.subheader("🌍 Language Distribution by Sentiment")
+                lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
+                fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
+                                 text="count", height=500,
+                                 color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-            # ====== KPI Metrics ======
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Tweets", len(filtered_df))
-            col2.metric("Avg. Length", int(filtered_df["model_clean"].str.len().mean()))
-            col3.metric("% of Dataset", f"{len(filtered_df)/len(df)*100:.1f}%")
+        # ====== Table + Download ======
+        st.subheader("📝 Tweets")
+        export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
+            ["id", "language", "binary_label", "sentiment", "tweet"]
+        ]
 
-            # ====== Top Words ======
-            st.subheader("🔠 Top 10 Words")
-            words = " ".join(filtered_df["model_clean"].dropna().astype(str))
-            word_freq = pd.Series(words.split()).value_counts().head(10)
-            fig = px.bar(word_freq, x=word_freq.values, y=word_freq.index,
-                         orientation="h", labels={"x":"Count", "y":"Word"})
-            st.plotly_chart(fig, use_container_width=True)
+        csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv,
+            file_name=f"{sentiment_filter.replace(' ','_').lower()}_tweets.csv",
+            mime="text/csv",
+            key=f"download_{i}"
+        )
 
-            # ====== Table with download ======
-            st.subheader("📝 Tweets")
-            export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
-                ["id", "language", "binary_label", "sentiment", "tweet"]
-            ]
-
-            # Download button (small & clean)
-            csv = export_df.to_csv(index=False, encoding="utf-8-sig")
-            st.download_button(
-                label="⬇️ Download CSV",
-                data=csv,
-                file_name=f"{sentiment_filter.replace(' ','_').lower()}_tweets.csv",
-                mime="text/csv",
-                key=f"download_{i}"
-            )
-
-            st.dataframe(export_df, use_container_width=True, height=400)
+        st.dataframe(export_df, use_container_width=True, height=400)
 
 
 # ==============================
@@ -273,9 +260,3 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.write(f"🌐 Translated: {translated}")
     else:
         st.sidebar.warning("Please enter some text.")
-
-# ==============================
-# Render
-# ==============================
-render_dashboard(st.session_state.df)
-render_sentiment_tabs(st.session_state.df)
