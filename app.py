@@ -371,9 +371,16 @@ if st.sidebar.button("Analyze Tweet"):
         except Exception:
             translated = "[translation error]"
 
+        # ✅ Insert new row
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
+
+        # ✅ Append into session state so tabs update live
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
+        # ✅ Sidebar results
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
         st.sidebar.write(f"🌐 Translated: {translated}")
+    else:
+        st.sidebar.warning("Please enter some text.")
+
