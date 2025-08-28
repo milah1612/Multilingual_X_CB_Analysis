@@ -254,7 +254,7 @@ with tabs[1]:
         st.info("No hashtags found for this filter.")
 
     # --- Hashtag Clustering (Treemap)
-    st.subheader("🧩 Hashtag Clustering (Experimental)")
+    st.subheader("🧩 Hashtag Clustering ")
     if top_hashtags:
         fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
                                  color="count", color_continuous_scale="Viridis",
@@ -331,7 +331,7 @@ with tabs[2]:
         st.info("No hashtags found for this filter.")
 
     # --- Hashtag Clustering (Treemap)
-    st.subheader("🧩 Hashtag Clustering (Experimental)")
+    st.subheader("🧩 Hashtag Clustering ")
     if top_hashtags:
         fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
                                  color="count", color_continuous_scale="Viridis",
