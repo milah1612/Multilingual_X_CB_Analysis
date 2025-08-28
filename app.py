@@ -78,8 +78,6 @@ def migrate_csv_to_sqlite():
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
-    else:
-        print("➡️ DB already has data, skipping migration") 
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -98,18 +96,16 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     conn.commit()
     conn.close()
 
-    new_row = pd.DataFrame([{
+    return pd.DataFrame([{
         "text": text,
         "language": language,
         "binary_label": binary_label,
         "sentiment": sentiment,
-        "model_clean": model_clean,   # ✅ keep canonical
+        "model_clean": model_clean,
         "eda_clean": eda_clean,
         "translated_tweet": translated_tweet,
         "timestamp": timestamp
     }])
-    return new_row
-
 
 # ==============================
 # Init and Cache
@@ -184,7 +180,8 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
         df = df[columns].rename(columns={"model_clean": "tweet"})
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-    page = st.number_input("Page", min_value=1, max_value=max(total_pages, 1), value=1, key=f"{key_prefix}_page")
+    page = st.number_input("Page", min_value=1, max_value=max(total_pages, 1),
+                           value=1, key=f"{key_prefix}_page")
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
     st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
@@ -229,59 +226,14 @@ with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
     df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
 
-    # ✅ Language filter applied before insights/export
-    languages_cb = ["All"] + sorted(df_cb["language"].dropna().unique())
-    selected_lang_cb = st.selectbox("🌍 Filter by Language", languages_cb, key="cb_lang")
-    if selected_lang_cb != "All":
-        df_cb = df_cb[df_cb["language"] == selected_lang_cb]
-
     st.subheader("📌 Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
-    total_cb = len(df_cb)
-    avg_len = df_cb["eda_clean"].str.len().mean()
-    perc = (total_cb / len(st.session_state.df)) * 100
-    kpi1.metric("Total CB Tweets", total_cb)
-    kpi2.metric("Avg. Tweet Length", f"{avg_len:.1f}")
-    kpi3.metric("% of Dataset", f"{perc:.1f}%")
-
-    st.subheader("🌍 CB Distribution by Language")
-    cb_lang_dist = df_cb["language"].value_counts().reset_index()
-    cb_lang_dist.columns = ["language", "count"]
-    fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
-                         text="count", height=500,
-                         color_discrete_map=LANG_COLORS)
-    st.plotly_chart(fig_cb_lang, use_container_width=True)
-
-    hashtags = [h for tags in df_cb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis",
-                                 height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
-    else:
-        st.info("No hashtags found.")
+    kpi1.metric("Total CB Tweets", len(df_cb))
+    kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
+    kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
     st.subheader("📋 Cyberbullying Tweets")
     render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
-
-    # ✅ Export respects filter
-    export_df_cb = df_cb.rename(columns={"model_clean": "tweet"})
-    download_cb = export_df_cb[["language", "sentiment", "tweet", "translated_tweet"]]
-    output_cb = io.BytesIO()
-    with pd.ExcelWriter(output_cb, engine="openpyxl") as writer:
-        download_cb.to_excel(writer, index=False, sheet_name="Cyberbullying")
-    st.download_button("⬇ Download Cyberbullying Report (Excel)", data=output_cb.getvalue(),
-                       file_name="cyberbullying_report.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ==============================
 # Non-Cyberbullying Tab
@@ -290,63 +242,18 @@ with tabs[2]:
     df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
     df_ncb["hashtags"] = df_ncb["text"].apply(extract_hashtags)
 
-    # ✅ Language filter applied before insights/export
-    languages_ncb = ["All"] + sorted(df_ncb["language"].dropna().unique())
-    selected_lang_ncb = st.selectbox("🌍 Filter by Language", languages_ncb, key="ncb_lang")
-    if selected_lang_ncb != "All":
-        df_ncb = df_ncb[df_ncb["language"] == selected_lang_ncb]
-
     st.subheader("📌 Non-Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
-    total_ncb = len(df_ncb)
-    avg_len = df_ncb["eda_clean"].str.len().mean()
-    perc = (total_ncb / len(st.session_state.df)) * 100
-    kpi1.metric("Total NCB Tweets", total_ncb)
-    kpi2.metric("Avg. Tweet Length", f"{avg_len:.1f}")
-    kpi3.metric("% of Dataset", f"{perc:.1f}%")
-
-    st.subheader("🌍 NCB Distribution by Language")
-    ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
-    ncb_lang_dist.columns = ["language", "count"]
-    fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
-                          text="count", height=500,
-                          color_discrete_map=LANG_COLORS)
-    st.plotly_chart(fig_ncb_lang, use_container_width=True)
-
-    hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis",
-                                 height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
-    else:
-        st.info("No hashtags found.")
+    kpi1.metric("Total NCB Tweets", len(df_ncb))
+    kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
+    kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
     st.subheader("📋 Non-Cyberbullying Tweets")
     render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
-    # ✅ Export respects filter
-    export_df_ncb = df_ncb.rename(columns={"model_clean": "tweet"})
-    download_ncb = export_df_ncb[["language", "sentiment", "tweet", "translated_tweet"]]
-    output_ncb = io.BytesIO()
-    with pd.ExcelWriter(output_ncb, engine="openpyxl") as writer:
-        download_ncb.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
-    st.download_button("⬇ Download Non-Cyberbullying Report (Excel)", data=output_ncb.getvalue(),
-                       file_name="non_cyberbullying_report.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 # ==============================
 # Sidebar
-# ============================== 
+# ==============================
 st.sidebar.image("twitter_icon.png", use_container_width=True)
 st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
@@ -375,7 +282,7 @@ if st.sidebar.button("Analyze Tweet"):
         # ✅ Insert new row
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
 
-        # ✅ Append into session state so tabs update live
+        # ✅ Update session state so all tabs refresh
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
         # ✅ Sidebar results
@@ -384,4 +291,3 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.write(f"🌐 Translated: {translated}")
     else:
         st.sidebar.warning("Please enter some text.")
-
