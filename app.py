@@ -9,7 +9,7 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
-import io   # ✅ moved here (not duplicated later)
+import io
 
 # ==============================
 # Language Mapping
@@ -177,12 +177,51 @@ def extract_hashtags(text):
     return []
 
 # ==============================
+# Pagination Helper
+# ==============================
+def paginate_dataframe(df, key_prefix, rows_per_page=20):
+    """Paginated display with First/Prev/Next/Last buttons below table"""
+    total_rows = len(df)
+    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
+
+    if f"{key_prefix}_page" not in st.session_state:
+        st.session_state[f"{key_prefix}_page"] = 1
+
+    page = st.session_state[f"{key_prefix}_page"]
+
+    start_idx = (page - 1) * rows_per_page
+    end_idx = start_idx + rows_per_page
+    paginated_df = df.iloc[start_idx:end_idx]
+
+    st.dataframe(paginated_df, use_container_width=True, height=400)
+
+    # Pagination controls BELOW the table
+    col1, col2, col3, col4, col5 = st.columns([1,1,1,1,8])
+    with col1:
+        if st.button("⏮ First", key=f"{key_prefix}_first"):
+            st.session_state[f"{key_prefix}_page"] = 1
+    with col2:
+        if st.button("⬅ Prev", key=f"{key_prefix}_prev") and page > 1:
+            st.session_state[f"{key_prefix}_page"] -= 1
+    with col3:
+        if st.button("Next ➡", key=f"{key_prefix}_next") and page < total_pages:
+            st.session_state[f"{key_prefix}_page"] += 1
+    with col4:
+        if st.button("⏭ Last", key=f"{key_prefix}_last"):
+            st.session_state[f"{key_prefix}_page"] = total_pages
+
+    st.caption(f"Page {st.session_state[f'{key_prefix}_page']} of {total_pages} — showing {rows_per_page} rows per page")
+
+# ==============================
 # Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
 
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
+
+# Sidebar global rows-per-page selector
+global_rows = st.sidebar.selectbox("Rows per page (applies to all tables)", [10, 20, 50, 100], index=1)
 
 # ==============================
 # All Tab
@@ -206,32 +245,8 @@ with tabs[0]:
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.subheader("📝 All Tweets")
-    rows_per_page = 20
-    total_rows = len(df)
-    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-
-    if "all_page" not in st.session_state:
-        st.session_state.all_page = 1
-
-    col1, col2, col3 = st.columns([4,1,1])
-    with col2:
-        if st.button("⬅ Prev", key="prev_all") and st.session_state.all_page > 1:
-            st.session_state.all_page -= 1
-    with col3:
-        if st.button("Next ➡", key="next_all") and st.session_state.all_page < total_pages:
-            st.session_state.all_page += 1
-
-    start_idx = (st.session_state.all_page - 1) * rows_per_page
-    end_idx = start_idx + rows_per_page
-
-    st.dataframe(
-        df[["language", "sentiment", "model_clean"]]
-        .rename(columns={"model_clean": "tweet"})
-        .iloc[start_idx:end_idx],
-        use_container_width=True,
-        height=400
-    )
-    st.caption(f"Page {st.session_state.all_page} of {total_pages} — showing {rows_per_page} rows per page")
+    export_df = df[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
+    paginate_dataframe(export_df, "all", global_rows)
 
 # ==============================
 # Cyberbullying Tab
@@ -281,32 +296,8 @@ with tabs[1]:
         st.info("No hashtags found.")
 
     st.subheader("📋 Cyberbullying Tweets")
-    rows_per_page = 20
-    total_rows = len(df_cb)
-    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-
-    if "cb_page" not in st.session_state:
-        st.session_state.cb_page = 1
-
-    col1, col2, col3 = st.columns([4,1,1])
-    with col2:
-        if st.button("⬅ Prev", key="prev_cb") and st.session_state.cb_page > 1:
-            st.session_state.cb_page -= 1
-    with col3:
-        if st.button("Next ➡", key="next_cb") and st.session_state.cb_page < total_pages:
-            st.session_state.cb_page += 1
-
-    start_idx = (st.session_state.cb_page - 1) * rows_per_page
-    end_idx = start_idx + rows_per_page
-
-    st.dataframe(
-        df_cb[["language", "sentiment", "model_clean"]]
-        .rename(columns={"model_clean": "tweet"})
-        .iloc[start_idx:end_idx],
-        use_container_width=True,
-        height=400
-    )
-    st.caption(f"Page {st.session_state.cb_page} of {total_pages} — showing {rows_per_page} rows per page")
+    export_df = df_cb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
+    paginate_dataframe(export_df, "cb", global_rows)
 
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
@@ -369,32 +360,8 @@ with tabs[2]:
         st.info("No hashtags found.")
 
     st.subheader("📋 Non-Cyberbullying Tweets")
-    rows_per_page = 20
-    total_rows = len(df_ncb)
-    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-
-    if "ncb_page" not in st.session_state:
-        st.session_state.ncb_page = 1
-
-    col1, col2, col3 = st.columns([4,1,1])
-    with col2:
-        if st.button("⬅ Prev", key="prev_ncb") and st.session_state.ncb_page > 1:
-            st.session_state.ncb_page -= 1
-    with col3:
-        if st.button("Next ➡", key="next_ncb") and st.session_state.ncb_page < total_pages:
-            st.session_state.ncb_page += 1
-
-    start_idx = (st.session_state.ncb_page - 1) * rows_per_page
-    end_idx = start_idx + rows_per_page
-
-    st.dataframe(
-        df_ncb[["language", "sentiment", "model_clean"]]
-        .rename(columns={"model_clean": "tweet"})
-        .iloc[start_idx:end_idx],
-        use_container_width=True,
-        height=400
-    )
-    st.caption(f"Page {st.session_state.ncb_page} of {total_pages} — showing {rows_per_page} rows per page")
+    export_df = df_ncb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
+    paginate_dataframe(export_df, "ncb", global_rows)
 
     export_df = df_ncb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
@@ -411,10 +378,10 @@ with tabs[2]:
 
 # ==============================
 # Sidebar
-# ============================== 
+# ==============================
 st.sidebar.image("twitter_icon.png", use_container_width=True)
 
-st.sidebar.header("🔍 X Cyberbullying Detection")  
+st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
 **X CYBERBULLYING DETECTION**  
 This application detects cyberbullying in tweets across multiple languages.  
