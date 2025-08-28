@@ -25,6 +25,18 @@ LANG_MAP = {
     "unknown": "unknown"
 }
 
+LANG_COLORS = {
+    "arabic": "#FF6F61",
+    "french": "#6B5B95",
+    "english": "#88B04B",
+    "spanish": "#F7CAC9",
+    "hindi": "#92A8D1",
+    "german": "#955251",
+    "italian": "#B565A7",
+    "portuguese": "#009B77",
+    "unknown": "#DD4124"
+}
+
 # ==============================
 # DB Functions
 # ==============================
@@ -156,16 +168,11 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Helper: Extract hashtags & emojis
+# Helper: Extract hashtags
 # ==============================
 def extract_hashtags(text):
     if isinstance(text, str):
         return re.findall(r"#\w+", text)
-    return []
-
-def extract_emojis(text):
-    if isinstance(text, str):
-        return [c for c in text if c in emoji.EMOJI_DATA]
     return []
 
 # ==============================
@@ -230,7 +237,7 @@ with tabs[1]:
     cb_lang_dist.columns = ["language", "count"]
     fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
                          text="count", height=500,
-                         color_discrete_sequence=px.colors.qualitative.Set2)
+                         color_discrete_map=LANG_COLORS)
     st.plotly_chart(fig_cb_lang, use_container_width=True)
 
     # --- Distinctive Hashtags (Bubble Chart)
@@ -246,26 +253,6 @@ with tabs[1]:
     else:
         st.info("No hashtags found for this filter.")
 
-    # --- Distinctive Emojis (Interactive Table)
-    emojis = [e for em in df_cb["eda_clean"].apply(extract_emojis) for e in em]
-    top_emojis = Counter(emojis).most_common(15)
-    if top_emojis:
-        st.subheader("😊 Distinctive Emojis")
-        emojis_df = pd.DataFrame(top_emojis, columns=["emoji", "count"])
-        emojis_df["percentage"] = (emojis_df["count"] / emojis_df["count"].sum() * 100).round(1)
-        st.dataframe(emojis_df, use_container_width=True, height=300)
-    else:
-        st.info("No emojis found for this filter.")
-
-    # --- Average Tweet Length by Class
-    st.subheader("📏 Average Tweet Length by Class")
-    avg_len_class = st.session_state.df.groupby("sentiment")["eda_clean"].apply(lambda x: x.str.len().mean()).reset_index()
-    avg_len_class.columns = ["sentiment", "avg_length"]
-    fig_len = px.bar(avg_len_class, x="sentiment", y="avg_length", color="sentiment",
-                     text="avg_length", height=500,
-                     color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-    st.plotly_chart(fig_len, use_container_width=True)
-
     # --- Hashtag Clustering (Treemap)
     st.subheader("🧩 Hashtag Clustering (Experimental)")
     if top_hashtags:
@@ -275,17 +262,6 @@ with tabs[1]:
         st.plotly_chart(fig_cluster, use_container_width=True)
     else:
         st.info("No hashtags found for clustering.")
-
-    # --- CB Prevalence by Language
-    st.subheader("📊 CB Prevalence by Language")
-    lang_total = st.session_state.df.groupby("language").size().reset_index(name="total")
-    lang_cb = df_cb.groupby("language").size().reset_index(name="cb_count")
-    prevalence = pd.merge(lang_cb, lang_total, on="language", how="left")
-    prevalence["cb_percent"] = (prevalence["cb_count"] / prevalence["total"] * 100).round(1)
-    fig_prev = px.bar(prevalence, x="language", y="cb_percent", color="language",
-                      text="cb_percent", height=500,
-                      color_discrete_sequence=px.colors.qualitative.Pastel)
-    st.plotly_chart(fig_prev, use_container_width=True)
 
     # --- Cyberbullying Tweets Table
     st.subheader("📋 Cyberbullying Tweets")
