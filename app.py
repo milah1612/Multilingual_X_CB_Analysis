@@ -268,41 +268,22 @@ with tabs[1]:
     st.dataframe(df_cb[["language", "sentiment", "model_clean", "translated_tweet"]],
                  use_container_width=True, height=400)
 
-         # --- Report Download
-    export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean", "translated_tweet"]]
-
-    format_choice = st.radio(
-        "Choose file format:",
-        ["CSV", "Excel"],
-        horizontal=True
+         # --- Report Download (Excel only)
+    export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
+        columns={"model_clean": "tweet"}
     )
 
-    if format_choice == "CSV":
-        # CSV (UTF-16 with tab separator → safer for Arabic in Excel)
-        csv = export_df.to_csv(index=False, encoding="utf-16", sep="\t")
-        st.download_button(
-            "⬇ Download Cyberbullying Report",
-            csv,
-            "cyberbullying_report.csv",
-            "text/csv"
-        )
-
-    elif format_choice == "Excel":
-        # Excel with openpyxl
-        import io
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            export_df.to_excel(writer, index=False, sheet_name="Cyberbullying")
-        st.download_button(
-            "⬇ Download Cyberbullying Report",
-            data=output.getvalue(),
-            file_name="cyberbullying_report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-
-
-
+    import io
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="Cyberbullying")
+    st.download_button(
+        "⬇ Download Cyberbullying Report (Excel)",
+        data=output.getvalue(),
+        file_name="cyberbullying_report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) 
+    
 
 # ==============================
 # Sidebar
