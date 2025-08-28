@@ -203,48 +203,78 @@ with tabs[0]:
     st.dataframe(df[["language", "sentiment", "model_clean", "translated_tweet"]],
                  use_container_width=True, height=400)
 
+# ==============================
+# Cyberbullying Tab
+# ==============================
 with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
     df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
 
-    # --- KPI Metrics
-    st.subheader("📌 Cyberbullying Insights")
+    # --- KPIs
     total_cb = len(df_cb)
-    avg_len = df_cb["eda_clean"].str.len().mean()
-    perc = (total_cb / len(st.session_state.df)) * 100
-    st.metric("Total Cyberbullying Tweets", total_cb)
-    st.metric("Avg. Tweet Length", f"{avg_len:.1f}")
-    st.metric("% of Dataset", f"{perc:.1f}%")
+    avg_len_cb = df_cb["eda_clean"].str.len().mean()
+    pct_cb = (total_cb / len(st.session_state.df) * 100) if len(st.session_state.df) > 0 else 0
 
-    # --- Top Words
-    words = " ".join(df_cb["eda_clean"].fillna("")).split()
-    top_words = Counter(words).most_common(10)
-    st.subheader("🔠 Top Words")
-    st.bar_chart(pd.DataFrame(top_words, columns=["word", "count"]).set_index("word"))
+    kpi1, kpi2, kpi3 = st.columns(3)
+    kpi1.metric("Total Tweets", f"{total_cb:,}")
+    kpi2.metric("Avg. Length", f"{avg_len_cb:.1f}")
+    kpi3.metric("% of Dataset", f"{pct_cb:.1f}%")
 
-    # --- Top Hashtags
-    hashtags = [h for tags in df_cb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(10)
-    st.subheader("#️⃣ Top Hashtags")
-    st.bar_chart(pd.DataFrame(top_hashtags, columns=["hashtag", "count"]).set_index("hashtag"))
+    st.markdown("---")
 
-    # --- Top Emojis (by sentiment only)
-    emojis = [e for em in df_cb["eda_clean"].apply(extract_emojis) for e in em]
-    top_emojis = Counter(emojis).most_common(10)
+    # --- Row 2: Top Words + Hashtags
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("🔤 Top Words")
+        words = " ".join(df_cb["eda_clean"].astype(str)).split()
+        word_freq = Counter(words)
+        top_words = pd.DataFrame(word_freq.most_common(15), columns=["word", "count"])
+        fig = px.bar(top_words, x="word", y="count", text="count", height=400)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("🏷️ Top Hashtags")
+        hashtags = [h for tags in df_cb["hashtags"] for h in tags]
+        hash_freq = Counter(hashtags)
+        top_hash = pd.DataFrame(hash_freq.most_common(15), columns=["hashtag", "count"])
+        if not top_hash.empty:
+            fig2 = px.bar(top_hash, x="hashtag", y="count", text="count", height=400)
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No hashtags found.")
+
+    st.markdown("---")
+
+    # --- Top Emojis (table format)
     st.subheader("😊 Top Emojis")
-    if top_emojis:
-        st.bar_chart(pd.DataFrame(top_emojis, columns=["emoji", "count"]).set_index("emoji"))
+    emojis = [e for em in df_cb["eda_clean"].apply(extract_emojis) for e in em]
+    emoji_freq = Counter(emojis).most_common(10)
+    if emoji_freq:
+        emoji_df = pd.DataFrame(emoji_freq, columns=["emoji", "count"])
+        st.table(emoji_df)
     else:
-        st.info("No emojis found for Cyberbullying tweets.")
+        st.info("No emojis found.")
 
-    # --- Table
+    st.markdown("---")
+
+    # --- Table with Language Filter
     st.subheader("📋 Cyberbullying Tweets")
-    st.dataframe(df_cb[["language", "sentiment", "model_clean", "translated_tweet"]],
-                 use_container_width=True, height=400)
+    lang_options = ["All"] + sorted(df_cb["language"].dropna().unique())
+    selected_lang = st.selectbox("🌍 Filter by Language", lang_options)
 
-    # --- Report Download
-    export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]]
-    csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+    filtered_cb = df_cb.copy()
+    if selected_lang != "All":
+        filtered_cb = filtered_cb[filtered_cb["language"] == selected_lang]
+
+    st.dataframe(
+        filtered_cb[["language", "sentiment", "model_clean", "translated_tweet"]],
+        use_container_width=True, height=400
+    )
+
+    # ✅ Report download (with full cols)
+    export_cb = filtered_cb[["id", "language", "binary_label", "sentiment", "model_clean", "translated_tweet"]]
+    csv = export_cb.to_csv(index=False, encoding="utf-8-sig")
     st.download_button("⬇ Download Cyberbullying Report", csv, "cyberbullying_report.csv", "text/csv")
 
 
