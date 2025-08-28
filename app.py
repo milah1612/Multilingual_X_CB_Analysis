@@ -99,13 +99,9 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     conn.close()
 
     new_row = pd.DataFrame([{
-        "id": None,
-        "text": text,
         "language": language,
-        "binary_label": binary_label,
         "sentiment": sentiment,
-        "tweet": model_clean,   # renamed
-        "eda_clean": eda_clean,
+        "tweet": model_clean,   # shown in UI
         "translated_tweet": translated_tweet,
         "timestamp": timestamp
     }])
@@ -169,48 +165,22 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Helper: Extract hashtags
-# ==============================
-def extract_hashtags(text):
-    if isinstance(text, str):
-        return re.findall(r"#\w+", text)
-    return []
-
-# ==============================
 # Pagination Helper
 # ==============================
 def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     if columns:
-        df = df[columns]
+        df = df[columns].rename(columns={"model_clean": "tweet"})
 
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
 
-    if f"{key_prefix}_page" not in st.session_state:
-        st.session_state[f"{key_prefix}_page"] = 1
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"{key_prefix}_page")
 
-    page = st.session_state[f"{key_prefix}_page"]
-
-    # Navigation ABOVE the table
-    nav1, nav2, nav3 = st.columns([0.1, 0.8, 0.1])
-    with nav1:
-        if st.button("➖", key=f"{key_prefix}_prev") and page > 1:
-            st.session_state[f"{key_prefix}_page"] -= 1
-    with nav3:
-        if st.button("➕", key=f"{key_prefix}_next") and page < total_pages:
-            st.session_state[f"{key_prefix}_page"] += 1
-
-    # Update page after click
-    page = st.session_state[f"{key_prefix}_page"]
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
 
-    # Show table
     st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
-
-    # Page info
     st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
-
 
 # ==============================
 # Dashboard Layout
@@ -242,7 +212,7 @@ with tabs[0]:
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.subheader("📝 All Tweets")
-    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean"])
+    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Cyberbullying Tab
@@ -268,26 +238,8 @@ with tabs[1]:
                          color_discrete_map=LANG_COLORS)
     st.plotly_chart(fig_cb_lang, use_container_width=True)
 
-    hashtags = [h for tags in df_cb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis",
-                                 height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
-    else:
-        st.info("No hashtags found.")
-
     st.subheader("📋 Cyberbullying Tweets")
-    render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean"])
+    render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
@@ -326,26 +278,8 @@ with tabs[2]:
                           color_discrete_map=LANG_COLORS)
     st.plotly_chart(fig_ncb_lang, use_container_width=True)
 
-    hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis",
-                                 height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
-    else:
-        st.info("No hashtags found.")
-
     st.subheader("📋 Non-Cyberbullying Tweets")
-    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean"])
+    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
     export_df = df_ncb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
