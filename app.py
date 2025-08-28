@@ -175,6 +175,7 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     end_idx = start_idx + rows_per_page
     st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
     st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
+    return df  # return df for downloads
 
 # ==============================
 # Dashboard
@@ -221,9 +222,8 @@ with tabs[1]:
     st.subheader("🌍 CB Distribution by Language")
     cb_lang_dist = df_cb["language"].value_counts().reset_index()
     cb_lang_dist.columns = ["language", "count"]
-    fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
-                         text="count", height=500, color_discrete_map=LANG_COLORS)
-    st.plotly_chart(fig_cb_lang, use_container_width=True)
+    st.plotly_chart(px.bar(cb_lang_dist, x="language", y="count", color="language",
+                           text="count", height=500, color_discrete_map=LANG_COLORS), use_container_width=True)
 
     hashtags = [h for tags in df_cb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
@@ -231,17 +231,15 @@ with tabs[1]:
         hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
         st.subheader("#️⃣ Distinctive Hashtags")
         st.plotly_chart(px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                   color="hashtag", hover_name="hashtag", size_max=60, height=500),
-                        use_container_width=True)
+                                   color="hashtag", hover_name="hashtag", size_max=60, height=500), use_container_width=True)
         st.subheader("🧩 Hashtag Clustering")
         st.plotly_chart(px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                   color="count", color_continuous_scale="Viridis", height=500),
-                        use_container_width=True)
+                                   color="count", color_continuous_scale="Viridis", height=500), use_container_width=True)
 
     st.subheader("📋 Cyberbullying Tweets")
-    render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"]) 
+    export_df_cb = render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
-# Excel download
+    # Excel download
     download_cb = export_df_cb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
     output_cb = io.BytesIO()
     with pd.ExcelWriter(output_cb, engine="openpyxl") as writer:
@@ -264,9 +262,8 @@ with tabs[2]:
     st.subheader("🌍 NCB Distribution by Language")
     ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
     ncb_lang_dist.columns = ["language", "count"]
-    fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
-                          text="count", height=500, color_discrete_map=LANG_COLORS)
-    st.plotly_chart(fig_ncb_lang, use_container_width=True)
+    st.plotly_chart(px.bar(ncb_lang_dist, x="language", y="count", color="language",
+                           text="count", height=500, color_discrete_map=LANG_COLORS), use_container_width=True)
 
     hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
@@ -274,17 +271,15 @@ with tabs[2]:
         hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
         st.subheader("#️⃣ Distinctive Hashtags")
         st.plotly_chart(px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                   color="hashtag", hover_name="hashtag", size_max=60, height=500),
-                        use_container_width=True)
+                                   color="hashtag", hover_name="hashtag", size_max=60, height=500), use_container_width=True)
         st.subheader("🧩 Hashtag Clustering")
         st.plotly_chart(px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                   color="count", color_continuous_scale="Viridis", height=500),
-                        use_container_width=True)
+                                   color="count", color_continuous_scale="Viridis", height=500), use_container_width=True)
 
     st.subheader("📋 Non-Cyberbullying Tweets")
-    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"]) 
+    export_df_ncb = render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
- Excel download
+    # Excel download
     download_ncb = export_df_ncb[["language", "sentiment", "model_clean"]].rename(columns={"model_clean": "tweet"})
     output_ncb = io.BytesIO()
     with pd.ExcelWriter(output_ncb, engine="openpyxl") as writer:
