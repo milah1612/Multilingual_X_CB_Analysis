@@ -263,6 +263,7 @@ Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Span
 """)
 
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
+
 if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
         model_cleaned = clean_for_model(tweet_input)
@@ -281,20 +282,30 @@ if st.sidebar.button("Analyze Tweet"):
 
         # ✅ Insert new row
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
-
-        # ✅ Update session state so all tabs refresh
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
-        # ✅ Sidebar results
-        st.sidebar.success(f"✅ Prediction: {sentiment}")
-        st.sidebar.write(f"🌍 Language: {lang}")
-        st.sidebar.write(f"🌐 Translated: {translated}")
+        # ✅ Store results in session state so they persist after rerun
+        st.session_state.analysis_result = {
+            "sentiment": sentiment,
+            "lang": lang,
+            "translated": translated
+        }
 
-        # ✅ Force rerun so charts + tables update instantly
+        # ✅ Rerun so charts + tables refresh
         st.rerun()
 
     else:
         st.sidebar.warning("Please enter some text.")
+
+# ==============================
+# Show analysis result if available
+# ==============================
+if "analysis_result" in st.session_state:
+    result = st.session_state.analysis_result
+    st.sidebar.success(f"✅ Prediction: {result['sentiment']}")
+    st.sidebar.write(f"🌍 Language: {result['lang']}")
+    st.sidebar.write(f"🌐 Translated: {result['translated']}")
+
 
 
 
