@@ -28,7 +28,7 @@ LANG_MAP = {
 # DB Functions
 # ==============================
 DB_FILE = "tweets.db"
-CSV_FILE = "tweet_data.csv"   # <--- remain as tweet_data.csv
+CSV_FILE = "tweet_data.csv"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -50,7 +50,6 @@ def init_db():
     conn.close()
 
 def migrate_csv_to_sqlite():
-    """Migrate CSV into SQLite if DB is empty"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM tweets")
@@ -59,15 +58,12 @@ def migrate_csv_to_sqlite():
 
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
-
-        # Ensure translated_tweet column exists
         if "translated_tweet" not in df.columns:
             df["translated_tweet"] = "[not translated]"
-
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
-        print("✅ Migrated CSV into SQLite")
+        print("✅ Migrated CSV into SQLite (first time only)")
     else:
         print("➡️ DB already has data, skipping migration") 
 
@@ -77,26 +73,19 @@ def load_tweets():
     conn.close()
     return df
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean):
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet):
     timestamp = datetime.now().isoformat()
 
-    # Translate immediately for new tweets
-    try:
-        translated = GoogleTranslator(source="auto", target="en").translate(text)
-    except Exception:
-        translated = "[translation error]"
-
-    # --- Insert into SQLite ---
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated, timestamp))
+    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp))
     conn.commit()
     conn.close()
 
-    # --- Append to CSV backup ---
+    # Update CSV as backup
     new_row = pd.DataFrame([{
         "text": text,
         "language": language,
@@ -104,7 +93,7 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "sentiment": sentiment,
         "model_clean": model_clean,
         "eda_clean": eda_clean,
-        "translated_tweet": translated,
+        "translated_tweet": translated_tweet,
         "timestamp": timestamp
     }])
     if os.path.exists(CSV_FILE):
@@ -112,10 +101,17 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
     else:
         new_row.to_csv(CSV_FILE, mode="w", header=True, index=False, encoding="utf-8-sig")
 
-# Init DB and migrate if needed
+    return new_row  # ✅ return new row for session update
+
+
+# ==============================
+# Init and Cache
+# ==============================
 init_db()
 migrate_csv_to_sqlite()
-df = load_tweets()
+
+if "df" not in st.session_state:
+    st.session_state.df = load_tweets()   # ✅ cache dataset
 
 # ==============================
 # Load Hugging Face Model
@@ -208,9 +204,7 @@ def render_dashboard(df):
 
 # ==============================
 # Sidebar
-# ============================== 
-st.sidebar.image("twitter_icon.png", use_container_width=True)  # <-- ✅ Added logo
-
+# ==============================
 st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
 **X CYBERBULLYING DETECTION**  
@@ -230,24 +224,22 @@ if st.sidebar.button("Analyze Tweet"):
             lang = LANG_MAP.get(detected_code, detected_code)
         except:
             lang = "unknown"
-
-        # ✅ Translate here
         try:
             translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
-        except Exception:
-            translated = "[translation error]"
+        except Exception as e:
+            translated = f"(Translation failed: {e})"
 
-        insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
+        # ✅ DB insert + return new row
+        new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
+
+        # ✅ Append to session_state.df (instant update)
+        st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
-        st.sidebar.write(f"🌐 Translated: {translated}")   # <-- ✅ Added here
-
-        # ✅ Reload fresh df so charts + table update
-        df = load_tweets()
-        render_dashboard(df)   # <-- refresh dashboard with new data
+        st.sidebar.write(f"🌐 Translated: {translated}")
     else:
         st.sidebar.warning("Please enter some text.")
 
-# Render Dashboard
-render_dashboard(df)
+# Render Dashboard with cached df
+render_dashboard(st.session_state.df)
