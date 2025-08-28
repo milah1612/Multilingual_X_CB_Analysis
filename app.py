@@ -205,12 +205,23 @@ with tabs[0]:
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.subheader("📝 All Tweets") 
-    rows_per_page = st.selectbox("Rows per page", [10, 20, 50, 100], index=1, key="all_rows")
+    st.subheader("📝 All Tweets")
+    rows_per_page = 20
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="all_page")
-    start_idx = (page - 1) * rows_per_page
+
+    if "all_page" not in st.session_state:
+        st.session_state.all_page = 1
+
+    col1, col2, col3 = st.columns([4,1,1])
+    with col2:
+        if st.button("⬅ Prev", key="prev_all") and st.session_state.all_page > 1:
+            st.session_state.all_page -= 1
+    with col3:
+        if st.button("Next ➡", key="next_all") and st.session_state.all_page < total_pages:
+            st.session_state.all_page += 1
+
+    start_idx = (st.session_state.all_page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
 
     st.dataframe(
@@ -220,7 +231,7 @@ with tabs[0]:
         use_container_width=True,
         height=400
     )
-    st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
+    st.caption(f"Page {st.session_state.all_page} of {total_pages} — showing {rows_per_page} rows per page")
 
 # ==============================
 # Cyberbullying Tab
@@ -270,12 +281,32 @@ with tabs[1]:
         st.info("No hashtags found.")
 
     st.subheader("📋 Cyberbullying Tweets")
+    rows_per_page = 20
+    total_rows = len(df_cb)
+    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
+
+    if "cb_page" not in st.session_state:
+        st.session_state.cb_page = 1
+
+    col1, col2, col3 = st.columns([4,1,1])
+    with col2:
+        if st.button("⬅ Prev", key="prev_cb") and st.session_state.cb_page > 1:
+            st.session_state.cb_page -= 1
+    with col3:
+        if st.button("Next ➡", key="next_cb") and st.session_state.cb_page < total_pages:
+            st.session_state.cb_page += 1
+
+    start_idx = (st.session_state.cb_page - 1) * rows_per_page
+    end_idx = start_idx + rows_per_page
+
     st.dataframe(
         df_cb[["language", "sentiment", "model_clean"]]
-        .rename(columns={"model_clean": "tweet"}),
+        .rename(columns={"model_clean": "tweet"})
+        .iloc[start_idx:end_idx],
         use_container_width=True,
         height=400
     )
+    st.caption(f"Page {st.session_state.cb_page} of {total_pages} — showing {rows_per_page} rows per page")
 
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
@@ -338,12 +369,32 @@ with tabs[2]:
         st.info("No hashtags found.")
 
     st.subheader("📋 Non-Cyberbullying Tweets")
+    rows_per_page = 20
+    total_rows = len(df_ncb)
+    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
+
+    if "ncb_page" not in st.session_state:
+        st.session_state.ncb_page = 1
+
+    col1, col2, col3 = st.columns([4,1,1])
+    with col2:
+        if st.button("⬅ Prev", key="prev_ncb") and st.session_state.ncb_page > 1:
+            st.session_state.ncb_page -= 1
+    with col3:
+        if st.button("Next ➡", key="next_ncb") and st.session_state.ncb_page < total_pages:
+            st.session_state.ncb_page += 1
+
+    start_idx = (st.session_state.ncb_page - 1) * rows_per_page
+    end_idx = start_idx + rows_per_page
+
     st.dataframe(
         df_ncb[["language", "sentiment", "model_clean"]]
-        .rename(columns={"model_clean": "tweet"}),
+        .rename(columns={"model_clean": "tweet"})
+        .iloc[start_idx:end_idx],
         use_container_width=True,
         height=400
     )
+    st.caption(f"Page {st.session_state.ncb_page} of {total_pages} — showing {rows_per_page} rows per page")
 
     export_df = df_ncb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
