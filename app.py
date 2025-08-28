@@ -113,6 +113,7 @@ migrate_csv_to_sqlite()
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()   # ✅ cache dataset
 
+
 # ==============================
 # Load Hugging Face Model
 # ==============================
@@ -217,6 +218,27 @@ def render_dashboard(df):
                  use_container_width=True, height=400)
     st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
 
+    # ==============================
+    # 📥 Download Options
+    # ==============================
+    st.subheader("📥 Download Report")
+    download_choice = st.radio(
+        "Choose data to download:",
+        ("All data", "Filtered data (based on selections)")
+    )
+    if download_choice == "All data":
+        download_df = df_display
+    else:
+        download_df = filtered_df
+
+    csv = download_df.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button(
+        label="⬇️ Download CSV",
+        data=csv,
+        file_name="tweet_report.csv",
+        mime="text/csv",
+    )
+
 
 # ==============================
 # Sidebar
@@ -245,10 +267,7 @@ if st.sidebar.button("Analyze Tweet"):
         except Exception as e:
             translated = f"(Translation failed: {e})"
 
-        # ✅ DB insert + return new row
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
-
-        # ✅ Append to session_state.df (instant update)
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
         st.sidebar.success(f"✅ Prediction: {sentiment}")
@@ -257,32 +276,5 @@ if st.sidebar.button("Analyze Tweet"):
     else:
         st.sidebar.warning("Please enter some text.")
 
-# Render Dashboard with cached df
-render_dashboard(st.session_state.df) 
-
-    # ==============================
-    # 📥 Download Options
-    # ==============================
-    st.subheader("📥 Download Report")
-
-    # Option: choose what to download
-    download_choice = st.radio(
-        "Choose data to download:",
-        ("All data", "Filtered data (based on selections)")
-    )
-
-    if download_choice == "All data":
-        download_df = df_display
-    else:
-        download_df = filtered_df
-
-    # Convert to CSV (UTF-8 Excel friendly)
-    csv = download_df.to_csv(index=False, encoding="utf-8-sig")
-
-    st.download_button(
-        label="⬇️ Download CSV",
-        data=csv,
-        file_name="tweet_report.csv",
-        mime="text/csv",
-    )
-
+# Render Dashboard
+render_dashboard(st.session_state.df)
