@@ -9,6 +9,7 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
+import io   # ✅ moved here (not duplicated later)
 
 # ==============================
 # Language Mapping
@@ -179,7 +180,7 @@ def extract_hashtags(text):
 # Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
-st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h2>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
 
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
 
@@ -204,20 +205,14 @@ with tabs[0]:
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
 
-       st.subheader("📝 All Tweets") 
-
-    # Rows per page option
+    st.subheader("📝 All Tweets") 
     rows_per_page = st.selectbox("Rows per page", [10, 20, 50, 100], index=1, key="all_rows")
-
-    # Pagination logic
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
     page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="all_page")
-
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
 
-    # ✅ Show paginated table with renamed column
     st.dataframe(
         df[["language", "sentiment", "model_clean"]]
         .rename(columns={"model_clean": "tweet"})
@@ -225,9 +220,7 @@ with tabs[0]:
         use_container_width=True,
         height=400
     )
-
     st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
-
 
 # ==============================
 # Cyberbullying Tab
@@ -236,7 +229,6 @@ with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
     df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
 
-    # --- KPI Metrics
     st.subheader("📌 Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
     total_cb = len(df_cb)
@@ -246,13 +238,11 @@ with tabs[1]:
     kpi2.metric("Avg. Tweet Length", f"{avg_len:.1f}")
     kpi3.metric("% of Dataset", f"{perc:.1f}%")
 
-    # --- Language filter
     languages = ["All"] + sorted(df_cb["language"].dropna().unique())
     selected_lang = st.selectbox("🌍 Filter by Language", languages, key="cb_lang")
     if selected_lang != "All":
         df_cb = df_cb[df_cb["language"] == selected_lang]
 
-    # --- CB Distribution by Language
     st.subheader("🌍 CB Distribution by Language")
     cb_lang_dist = df_cb["language"].value_counts().reset_index()
     cb_lang_dist.columns = ["language", "count"]
@@ -261,7 +251,6 @@ with tabs[1]:
                          color_discrete_map=LANG_COLORS)
     st.plotly_chart(fig_cb_lang, use_container_width=True)
 
-    # --- Distinctive Hashtags (Bubble Chart)
     hashtags = [h for tags in df_cb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
     if top_hashtags:
@@ -271,21 +260,16 @@ with tabs[1]:
                                 color="hashtag", hover_name="hashtag",
                                 size_max=60, height=500)
         st.plotly_chart(fig_bubble, use_container_width=True)
-    else:
-        st.info("No hashtags found for this filter.")
 
-    # --- Hashtag Clustering (Treemap)
-    st.subheader("🧩 Hashtag Clustering ")
-    if top_hashtags:
+        st.subheader("🧩 Hashtag Clustering")
         fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
                                  color="count", color_continuous_scale="Viridis",
                                  height=500)
         st.plotly_chart(fig_cluster, use_container_width=True)
     else:
-        st.info("No hashtags found for clustering.")
+        st.info("No hashtags found.")
 
-    # --- Cyberbullying Tweets Table
-        st.subheader("📋 Cyberbullying Tweets")
+    st.subheader("📋 Cyberbullying Tweets")
     st.dataframe(
         df_cb[["language", "sentiment", "model_clean"]]
         .rename(columns={"model_clean": "tweet"}),
@@ -293,13 +277,9 @@ with tabs[1]:
         height=400
     )
 
-
-         # --- Report Download (Excel only)
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
     )
-
-    import io
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         export_df.to_excel(writer, index=False, sheet_name="Cyberbullying")
@@ -308,8 +288,7 @@ with tabs[1]:
         data=output.getvalue(),
         file_name="cyberbullying_report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    ) 
-
+    )
 
 # ==============================
 # Non-Cyberbullying Tab
@@ -318,7 +297,6 @@ with tabs[2]:
     df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
     df_ncb["hashtags"] = df_ncb["text"].apply(extract_hashtags)
 
-    # --- KPI Metrics
     st.subheader("📌 Non-Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
     total_ncb = len(df_ncb)
@@ -328,13 +306,11 @@ with tabs[2]:
     kpi2.metric("Avg. Tweet Length", f"{avg_len:.1f}")
     kpi3.metric("% of Dataset", f"{perc:.1f}%")
 
-    # --- Language filter
     languages = ["All"] + sorted(df_ncb["language"].dropna().unique())
     selected_lang = st.selectbox("🌍 Filter by Language", languages, key="ncb_lang")
     if selected_lang != "All":
         df_ncb = df_ncb[df_ncb["language"] == selected_lang]
 
-    # --- NCB Distribution by Language
     st.subheader("🌍 NCB Distribution by Language")
     ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
     ncb_lang_dist.columns = ["language", "count"]
@@ -343,7 +319,6 @@ with tabs[2]:
                           color_discrete_map=LANG_COLORS)
     st.plotly_chart(fig_ncb_lang, use_container_width=True)
 
-    # --- Distinctive Hashtags (Bubble Chart)
     hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
     if top_hashtags:
@@ -353,32 +328,26 @@ with tabs[2]:
                                 color="hashtag", hover_name="hashtag",
                                 size_max=60, height=500)
         st.plotly_chart(fig_bubble, use_container_width=True)
-    else:
-        st.info("No hashtags found for this filter.")
 
-    # --- Hashtag Clustering (Treemap)
-    st.subheader("🧩 Hashtag Clustering ")
-    if top_hashtags:
+        st.subheader("🧩 Hashtag Clustering")
         fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
                                  color="count", color_continuous_scale="Viridis",
                                  height=500)
         st.plotly_chart(fig_cluster, use_container_width=True)
     else:
-        st.info("No hashtags found for clustering.")
+        st.info("No hashtags found.")
 
-    # --- Non-Cyberbullying Tweets Table
     st.subheader("📋 Non-Cyberbullying Tweets")
-    st.dataframe(df_ncb[["language", "sentiment", "model_clean"]].rename(
-        columns={"model_clean": "tweet"}),
-        use_container_width=True, height=400
+    st.dataframe(
+        df_ncb[["language", "sentiment", "model_clean"]]
+        .rename(columns={"model_clean": "tweet"}),
+        use_container_width=True,
+        height=400
     )
 
-    # --- Report Download (Excel only)
     export_df = df_ncb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
         columns={"model_clean": "tweet"}
     )
-
-    import io
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         export_df.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
@@ -389,11 +358,10 @@ with tabs[2]:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-
 # ==============================
 # Sidebar
 # ============================== 
-st.sidebar.image("twitter_icon.png", use_container_width=True)  # <-- ✅ Added logo
+st.sidebar.image("twitter_icon.png", use_container_width=True)
 
 st.sidebar.header("🔍 X Cyberbullying Detection")  
 st.sidebar.markdown("""
@@ -401,6 +369,7 @@ st.sidebar.markdown("""
 This application detects cyberbullying in tweets across multiple languages.  
 Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
 """)
+
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 if st.sidebar.button("Analyze Tweet"):
     if tweet_input.strip():
