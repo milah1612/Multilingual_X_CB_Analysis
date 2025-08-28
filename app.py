@@ -187,59 +187,55 @@ def render_dashboard(df):
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.subheader("📝 Sentiment and Processed Tweets")
-    df_display = df.rename(columns={"model_clean": "tweet"})
 
-    # 🌍 Language filter
-    languages = ["All"] + sorted(df_display["language"].dropna().unique())
-    selected_lang = st.selectbox("🌍 Filter by Language", languages)
+# ==============================
+# Sentiment Explorer Tabs
+# ==============================
+def render_sentiment_tabs(df):
+    st.markdown("---")
+    st.header("📑 Sentiment Explorer")
 
-    # 🛡️ Sentiment filter
-    sentiments = ["All"] + sorted(df_display["sentiment"].dropna().unique())
-    selected_sentiment = st.selectbox("🛡️ Filter by Sentiment", sentiments)
+    tabs = st.tabs(["All", "Cyberbullying 🚨", "Non-Cyberbullying 🛡️"])
 
-    rows_to_show = st.slider("📊 Number of rows to display", 10, 100, 20)
+    for i, sentiment_filter in enumerate(["All", "Cyberbullying", "Non Cyberbullying"]):
+        with tabs[i]:
+            # Filter dataset
+            if sentiment_filter == "All":
+                filtered_df = df.copy()
+            else:
+                filtered_df = df[df["sentiment"] == sentiment_filter]
 
-    # Apply filters
-    filtered_df = df_display.copy()
-    if selected_lang != "All":
-        filtered_df = filtered_df[filtered_df["language"] == selected_lang]
-    if selected_sentiment != "All":
-        filtered_df = filtered_df[filtered_df["sentiment"] == selected_sentiment]
+            # ====== KPI Metrics ======
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Tweets", len(filtered_df))
+            col2.metric("Avg. Length", int(filtered_df["model_clean"].str.len().mean()))
+            col3.metric("% of Dataset", f"{len(filtered_df)/len(df)*100:.1f}%")
 
-    # Pagination
-    page_size = rows_to_show
-    total_pages = (len(filtered_df) // page_size) + 1
-    page = st.number_input("📑 Page", min_value=1, max_value=total_pages, step=1)
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
+            # ====== Top Words ======
+            st.subheader("🔠 Top 10 Words")
+            words = " ".join(filtered_df["model_clean"].dropna().astype(str))
+            word_freq = pd.Series(words.split()).value_counts().head(10)
+            fig = px.bar(word_freq, x=word_freq.values, y=word_freq.index,
+                         orientation="h", labels={"x":"Count", "y":"Word"})
+            st.plotly_chart(fig, use_container_width=True)
 
-    # ✅ Prepare exportable dataset (All vs Filtered)
-    export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
-        ["id", "language", "binary_label", "sentiment", "tweet"]
-    ]
+            # ====== Table with download ======
+            st.subheader("📝 Tweets")
+            export_df = filtered_df.rename(columns={"model_clean": "tweet"})[
+                ["id", "language", "binary_label", "sentiment", "tweet"]
+            ]
 
-    # ✅ Show as data_editor with built-in toolbar + download button
-    st.data_editor(
-        export_df.iloc[start_idx:end_idx],
-        use_container_width=True,
-        height=400,
-        hide_index=True,
-        num_rows="fixed",
-        disabled=True,
-        key="tweet_table",
-        column_config={
-            "tweet": st.column_config.TextColumn("Tweet", width="large")
-        },
-        download_button={
-            "label": "⬇ Download CSV",
-            "data": export_df.to_csv(index=False, encoding="utf-8-sig"),
-            "file_name": "tweet_report.csv",
-            "mime": "text/csv",
-        },
-    )
+            # Download button (small & clean)
+            csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+            st.download_button(
+                label="⬇️ Download CSV",
+                data=csv,
+                file_name=f"{sentiment_filter.replace(' ','_').lower()}_tweets.csv",
+                mime="text/csv",
+                key=f"download_{i}"
+            )
 
-    st.caption(f"Showing {start_idx+1}–{min(end_idx, len(filtered_df))} of {len(filtered_df)} tweets")
+            st.dataframe(export_df, use_container_width=True, height=400)
 
 
 # ==============================
@@ -278,5 +274,8 @@ if st.sidebar.button("Analyze Tweet"):
     else:
         st.sidebar.warning("Please enter some text.")
 
-# Render Dashboard
+# ==============================
+# Render
+# ==============================
 render_dashboard(st.session_state.df)
+render_sentiment_tabs(st.session_state.df)
