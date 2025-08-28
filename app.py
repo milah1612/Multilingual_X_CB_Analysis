@@ -181,7 +181,7 @@ def extract_hashtags(text):
 # ==============================
 def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     if columns:
-        df = df[columns].rename(columns={"model_clean": "tweet"})
+        df = df[columns]
 
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
@@ -190,27 +190,27 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
         st.session_state[f"{key_prefix}_page"] = 1
 
     page = st.session_state[f"{key_prefix}_page"]
+
+    # Navigation ABOVE the table
+    nav1, nav2, nav3 = st.columns([0.1, 0.8, 0.1])
+    with nav1:
+        if st.button("➖", key=f"{key_prefix}_prev") and page > 1:
+            st.session_state[f"{key_prefix}_page"] -= 1
+    with nav3:
+        if st.button("➕", key=f"{key_prefix}_next") and page < total_pages:
+            st.session_state[f"{key_prefix}_page"] += 1
+
+    # Update page after click
+    page = st.session_state[f"{key_prefix}_page"]
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
 
+    # Show table
     st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
 
-    # Navigation below table, aligned left
-    nav1, nav2, nav3, nav4, _ = st.columns([0.1, 0.1, 0.1, 0.1, 0.6])
-    with nav1:
-        if st.button("⏮ First", key=f"{key_prefix}_first"):
-            st.session_state[f"{key_prefix}_page"] = 1
-    with nav2:
-        if st.button("⬅ Prev", key=f"{key_prefix}_prev") and page > 1:
-            st.session_state[f"{key_prefix}_page"] -= 1
-    with nav3:
-        if st.button("Next ➡", key=f"{key_prefix}_next") and page < total_pages:
-            st.session_state[f"{key_prefix}_page"] += 1
-    with nav4:
-        if st.button("⏭ Last", key=f"{key_prefix}_last"):
-            st.session_state[f"{key_prefix}_page"] = total_pages
-
+    # Page info
     st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
+
 
 # ==============================
 # Dashboard Layout
