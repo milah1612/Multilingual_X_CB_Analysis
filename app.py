@@ -278,13 +278,17 @@ with tabs[1]:
 
     # ✅ XLSX (Excel file with full Unicode support)
     import io
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="Cyberbullying")
-    st.download_button("⬇ Download Cyberbullying Report (Excel)", 
-                       data=output.getvalue(),
-                       file_name="cyberbullying_report.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+output = io.BytesIO()
+with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    export_df.to_excel(writer, index=False, sheet_name="Cyberbullying")
+st.download_button(
+    "⬇ Download Cyberbullying Report (Excel)",
+    data=output.getvalue(),
+    file_name="cyberbullying_report.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
 
 
 # ==============================
