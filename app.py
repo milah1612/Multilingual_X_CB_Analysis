@@ -204,9 +204,30 @@ with tabs[0]:
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.subheader("📝 All Tweets")
-    st.dataframe(df[["language", "sentiment", "model_clean", "translated_tweet"]],
-                 use_container_width=True, height=400)
+       st.subheader("📝 All Tweets") 
+
+    # Rows per page option
+    rows_per_page = st.selectbox("Rows per page", [10, 20, 50, 100], index=1, key="all_rows")
+
+    # Pagination logic
+    total_rows = len(df)
+    total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="all_page")
+
+    start_idx = (page - 1) * rows_per_page
+    end_idx = start_idx + rows_per_page
+
+    # ✅ Show paginated table with renamed column
+    st.dataframe(
+        df[["language", "sentiment", "model_clean"]]
+        .rename(columns={"model_clean": "tweet"})
+        .iloc[start_idx:end_idx],
+        use_container_width=True,
+        height=400
+    )
+
+    st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
+
 
 # ==============================
 # Cyberbullying Tab
@@ -264,9 +285,14 @@ with tabs[1]:
         st.info("No hashtags found for clustering.")
 
     # --- Cyberbullying Tweets Table
-    st.subheader("📋 Cyberbullying Tweets")
-    st.dataframe(df_cb[["language", "sentiment", "model_clean", "translated_tweet"]],
-                 use_container_width=True, height=400)
+        st.subheader("📋 Cyberbullying Tweets")
+    st.dataframe(
+        df_cb[["language", "sentiment", "model_clean"]]
+        .rename(columns={"model_clean": "tweet"}),
+        use_container_width=True,
+        height=400
+    )
+
 
          # --- Report Download (Excel only)
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]].rename(
