@@ -228,12 +228,23 @@ if st.sidebar.button("Analyze Tweet"):
             lang = LANG_MAP.get(detected_code, detected_code)
         except:
             lang = "unknown"
+
+        # ✅ Translate here
+        try:
+            translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
+        except Exception:
+            translated = "[translation error]"
+
         insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned)
+
         st.sidebar.success(f"✅ Prediction: {sentiment}")
         st.sidebar.write(f"🌍 Language: {lang}")
+        st.sidebar.write(f"🌐 Translated: {translated}")   # <-- ✅ Added here
+
         df = load_tweets()
     else:
         st.sidebar.warning("Please enter some text.")
+
 
 # Render Dashboard
 render_dashboard(df)
