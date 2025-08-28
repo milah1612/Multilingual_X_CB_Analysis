@@ -164,7 +164,11 @@ def extract_hashtags(text):
     return []
 
 def extract_emojis(text):
-    return [c for c in text if c in emoji.EMOJI_DATA]
+    """Return list of emojis in text (safe for NaN)."""
+    if isinstance(text, str):
+        return [c for c in text if c in emoji.EMOJI_DATA]
+    return []
+
 
 # ==============================
 # Dashboard Layout
@@ -199,13 +203,9 @@ with tabs[0]:
     st.dataframe(df[["language", "sentiment", "model_clean", "translated_tweet"]],
                  use_container_width=True, height=400)
 
-# ==============================
-# Cyberbullying Tab
-# ==============================
 with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
     df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
-    df_cb["emojis"] = df_cb["eda_clean"].apply(extract_emojis)
 
     # --- KPI Metrics
     st.subheader("📌 Cyberbullying Insights")
@@ -228,11 +228,14 @@ with tabs[1]:
     st.subheader("#️⃣ Top Hashtags")
     st.bar_chart(pd.DataFrame(top_hashtags, columns=["hashtag", "count"]).set_index("hashtag"))
 
-    # --- Top Emojis
-    emojis = [e for em in df_cb["emojis"] for e in em]
+    # --- Top Emojis (by sentiment only)
+    emojis = [e for em in df_cb["eda_clean"].apply(extract_emojis) for e in em]
     top_emojis = Counter(emojis).most_common(10)
     st.subheader("😊 Top Emojis")
-    st.bar_chart(pd.DataFrame(top_emojis, columns=["emoji", "count"]).set_index("emoji"))
+    if top_emojis:
+        st.bar_chart(pd.DataFrame(top_emojis, columns=["emoji", "count"]).set_index("emoji"))
+    else:
+        st.info("No emojis found for Cyberbullying tweets.")
 
     # --- Table
     st.subheader("📋 Cyberbullying Tweets")
@@ -243,6 +246,7 @@ with tabs[1]:
     export_df = df_cb[["id", "language", "binary_label", "sentiment", "model_clean"]]
     csv = export_df.to_csv(index=False, encoding="utf-8-sig")
     st.download_button("⬇ Download Cyberbullying Report", csv, "cyberbullying_report.csv", "text/csv")
+
 
 # ==============================
 # Sidebar
