@@ -258,4 +258,31 @@ if st.sidebar.button("Analyze Tweet"):
         st.sidebar.warning("Please enter some text.")
 
 # Render Dashboard with cached df
-render_dashboard(st.session_state.df)
+render_dashboard(st.session_state.df) 
+
+    # ==============================
+    # 📥 Download Options
+    # ==============================
+    st.subheader("📥 Download Report")
+
+    # Option: choose what to download
+    download_choice = st.radio(
+        "Choose data to download:",
+        ("All data", "Filtered data (based on selections)")
+    )
+
+    if download_choice == "All data":
+        download_df = df_display
+    else:
+        download_df = filtered_df
+
+    # Convert to CSV (UTF-8 Excel friendly)
+    csv = download_df.to_csv(index=False, encoding="utf-8-sig")
+
+    st.download_button(
+        label="⬇️ Download CSV",
+        data=csv,
+        file_name="tweet_report.csv",
+        mime="text/csv",
+    )
+
