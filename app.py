@@ -226,13 +226,13 @@ with tabs[0]:
 # ==============================
 with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
-    df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags) 
+    df_cb["hashtags"] = df_cb["text"].apply(extract_hashtags)
 
-  languages_cb = ["All"] + sorted(df_cb["language"].dropna().unique())
-  selected_lang_cb = st.selectbox("🌍 Filter by Language", languages_cb, key="cb_lang")
-  if selected_lang_cb != "All":
-     df_cb = df_cb[df_cb["language"] == selected_lang_cb]
-
+    # ✅ Language filter applied before insights/export
+    languages_cb = ["All"] + sorted(df_cb["language"].dropna().unique())
+    selected_lang_cb = st.selectbox("🌍 Filter by Language", languages_cb, key="cb_lang")
+    if selected_lang_cb != "All":
+        df_cb = df_cb[df_cb["language"] == selected_lang_cb]
 
     st.subheader("📌 Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
@@ -272,8 +272,9 @@ with tabs[1]:
     st.subheader("📋 Cyberbullying Tweets")
     render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
+    # ✅ Export respects filter
     export_df_cb = df_cb.rename(columns={"model_clean": "tweet"})
-    download_cb = export_df_cb[["language", "sentiment", "tweet"]]
+    download_cb = export_df_cb[["language", "sentiment", "tweet", "translated_tweet"]]
     output_cb = io.BytesIO()
     with pd.ExcelWriter(output_cb, engine="openpyxl") as writer:
         download_cb.to_excel(writer, index=False, sheet_name="Cyberbullying")
@@ -286,13 +287,13 @@ with tabs[1]:
 # ==============================
 with tabs[2]:
     df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
-    df_ncb["hashtags"] = df_ncb["text"].apply(extract_hashtags) 
+    df_ncb["hashtags"] = df_ncb["text"].apply(extract_hashtags)
 
+    # ✅ Language filter applied before insights/export
     languages_ncb = ["All"] + sorted(df_ncb["language"].dropna().unique())
-   selected_lang_ncb = st.selectbox("🌍 Filter by Language", languages_ncb, key="ncb_lang")
-   if selected_lang_ncb != "All":
-      df_ncb = df_ncb[df_ncb["language"] == selected_lang_ncb]
-
+    selected_lang_ncb = st.selectbox("🌍 Filter by Language", languages_ncb, key="ncb_lang")
+    if selected_lang_ncb != "All":
+        df_ncb = df_ncb[df_ncb["language"] == selected_lang_ncb]
 
     st.subheader("📌 Non-Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
@@ -332,8 +333,9 @@ with tabs[2]:
     st.subheader("📋 Non-Cyberbullying Tweets")
     render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
+    # ✅ Export respects filter
     export_df_ncb = df_ncb.rename(columns={"model_clean": "tweet"})
-    download_ncb = export_df_ncb[["language", "sentiment", "tweet"]]
+    download_ncb = export_df_ncb[["language", "sentiment", "tweet", "translated_tweet"]]
     output_ncb = io.BytesIO()
     with pd.ExcelWriter(output_ncb, engine="openpyxl") as writer:
         download_ncb.to_excel(writer, index=False, sheet_name="Non-Cyberbullying")
