@@ -360,5 +360,55 @@ if "analysis_result" in st.session_state:
     st.sidebar.write(f"🌐 Translated: {result['translated']}")
 
 
+# ---- Bulk Upload Analysis ----
+st.sidebar.subheader("📤 Upload Tweets for Auto Analysis")
+uploaded_file = st.sidebar.file_uploader("Upload CSV/XLSX", type=["csv", "xlsx"])
+
+if uploaded_file is not None:
+    if uploaded_file.name.endswith(".csv"):
+        new_df = pd.read_csv(uploaded_file)
+    else:
+        new_df = pd.read_excel(uploaded_file)
+
+    if "text" not in new_df.columns:
+        st.sidebar.error("❌ File must have a 'text' column containing tweets.")
+    else:
+        results = []
+        for _, row in new_df.iterrows():
+            raw_text = str(row["text"])
+            model_cleaned = clean_for_model(raw_text)
+            eda_cleaned = clean_for_eda(raw_text)
+            label, cb_prob = predict(model_cleaned)
+            sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+
+            try:
+                detected_code = detect(raw_text)
+                lang = LANG_MAP.get(detected_code, detected_code)
+            except:
+                lang = "unknown"
+
+            try:
+                translated = GoogleTranslator(source="auto", target="en").translate(raw_text)
+            except Exception:
+                translated = "[translation error]"
+
+            new_row = insert_tweet(raw_text, lang, label, sentiment,
+                                   model_cleaned, eda_cleaned, translated)
+            results.append(new_row)
+
+        if results:
+            # ✅ Merge uploaded results into dashboard data
+            st.session_state.df = pd.concat([pd.concat(results), st.session_state.df],
+                                            ignore_index=True)
+
+            # ✅ Store a flag to show success once
+            st.session_state.upload_success = True
+            st.rerun()
+
+# ✅ Show upload success message (persists after rerun)
+if "upload_success" in st.session_state and st.session_state.upload_success:
+    st.sidebar.success("✅ Uploaded tweets analyzed and added to dashboard!")
+    st.session_state.upload_success = False
+
 
 
