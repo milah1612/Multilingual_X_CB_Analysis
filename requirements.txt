@@ -21,4 +21,5 @@ langdetect
 
 sqlalchemy  # optional, for ORM style
 
+openpyxl
 
