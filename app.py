@@ -412,154 +412,24 @@ if "upload_success" in st.session_state and st.session_state.upload_success:
 
 
 # ==============================
-# Admin / DB Maintenance (optional)
+# DB Maintenance (Debug/Admin)
 # ==============================
-with st.expander("🛠️ DB Maintenance (Admin)"):
-    import sqlite3, os
-    from datetime import datetime
+st.sidebar.subheader("🛠 DB Maintenance")
 
-    db_path = os.path.abspath(DB_FILE)
-    st.write(f"**DB path:** `{db_path}`")
-    try:
-        size = os.path.getsize(DB_FILE)
-        st.write(f"**DB size:** {size/1024:.1f} KB")
-    except Exception:
-        st.warning("DB file not found in current working directory.")
+if st.sidebar.checkbox("Show DB Preview"):
+    conn = sqlite3.connect("tweets.db")
+    total = pd.read_sql("SELECT COUNT(*) AS total FROM tweets", conn)
+    st.sidebar.write(f"**Total Rows:** {int(total['total'][0])}")
 
-    # Show basic stats
-    try:
-        with sqlite3.connect(DB_FILE) as conn:
-            total = pd.read_sql("SELECT COUNT(*) AS n FROM tweets", conn).iloc[0,0]
-            st.write(f"**Total rows:** {total}")
+    preview = pd.read_sql("""
+        SELECT id, timestamp, language, sentiment, model_clean, translated_tweet
+        FROM tweets
+        ORDER BY timestamp DESC
+        LIMIT 20
+    """, conn)
+    conn.close()
 
-            # Preview
-            st.write("### Preview (most recent first)")
-            preview_n = st.number_input("Rows to preview", 5, 1000, 20, key="admin_preview_n")
-            preview_df = pd.read_sql(
-                f"""
-                SELECT id, timestamp, language, sentiment, model_clean, translated_tweet
-                FROM tweets
-                ORDER BY timestamp DESC
-                LIMIT {int(preview_n)}
-                """, conn
-            )
-            st.dataframe(preview_df, use_container_width=True, height=300)
+    st.sidebar.write("**Preview of latest 20 rows:**")
+    st.sidebar.dataframe(preview, height=300, use_container_width=True)
 
-            # Backup to CSV
-            if st.button("⬇️ Backup entire table to CSV"):
-                dump = pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", conn)
-                csv_bytes = dump.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-                st.download_button(
-                    "Download tweets_backup.csv",
-                    data=csv_bytes,
-                    file_name="tweets_backup.csv",
-                    mime="text/csv"
-                )
-
-            st.markdown("---")
-
-            # Remove duplicates (keep latest by timestamp)
-            st.write("### Remove duplicate rows")
-            st.caption("Duplicates are considered rows with the same (text, language, sentiment). Keeps the newest timestamp.")
-            if st.button("🧹 De-duplicate"):
-                # Uses a window function; SQLite ≥3.25 supports this on Streamlit Cloud.
-                conn.execute("""
-                    DELETE FROM tweets
-                    WHERE id IN (
-                      SELECT id FROM (
-                        SELECT
-                          id,
-                          ROW_NUMBER() OVER (
-                            PARTITION BY text, language, sentiment
-                            ORDER BY datetime(timestamp) DESC
-                          ) AS rn
-                        FROM tweets
-                      )
-                      WHERE rn > 1
-                    );
-                """)
-                conn.commit()
-                new_total = pd.read_sql("SELECT COUNT(*) AS n FROM tweets", conn).iloc[0,0]
-                st.success(f"De-duplication done. New total rows: {new_total}")
-
-            st.markdown("---")
-
-            # Delete by date range
-            st.write("### Delete by date range")
-            col_from, col_to = st.columns(2)
-            with col_from:
-                date_from = st.date_input("From (inclusive)")
-            with col_to:
-                date_to = st.date_input("To (inclusive)")
-
-            if st.button("🗑️ Delete rows in date range"):
-                # Convert to ISO constraints; timestamp stored as ISO text in your app
-                ts_from = datetime.combine(date_from, datetime.min.time()).isoformat()
-                ts_to   = datetime.combine(date_to,   datetime.max.time()).isoformat()
-
-                # Confirm count first
-                count_df = pd.read_sql(
-                    "SELECT COUNT(*) AS n FROM tweets WHERE timestamp BETWEEN ? AND ?",
-                    conn, params=(ts_from, ts_to)
-                )
-                to_delete = int(count_df.iloc[0,0])
-                if to_delete == 0:
-                    st.info("No rows in that range.")
-                else:
-                    conn.execute("DELETE FROM tweets WHERE timestamp BETWEEN ? AND ?", (ts_from, ts_to))
-                    conn.commit()
-                    st.success(f"Deleted {to_delete} rows between {ts_from} and {ts_to}.")
-
-            st.markdown("---")
-
-            # Delete by sentiment or language (quick filters)
-            st.write("### Quick delete by filters")
-            langs = ["(Any)"] + sorted([r[0] for r in conn.execute("SELECT DISTINCT language FROM tweets").fetchall() if r[0]])
-            sentiments = ["(Any)"] + sorted([r[0] for r in conn.execute("SELECT DISTINCT sentiment FROM tweets").fetchall() if r[0]])
-            c1, c2 = st.columns(2)
-            with c1:
-                sel_lang = st.selectbox("Language filter", langs)
-            with c2:
-                sel_sent = st.selectbox("Sentiment filter", sentiments)
-
-            if st.button("🗑️ Delete by filters"):
-                where = []
-                params = []
-                if sel_lang != "(Any)":
-                    where.append("language = ?")
-                    params.append(sel_lang)
-                if sel_sent != "(Any)":
-                    where.append("sentiment = ?")
-                    params.append(sel_sent)
-                if where:
-                    where_sql = " WHERE " + " AND ".join(where)
-                else:
-                    where_sql = ""
-
-                count_df = pd.read_sql(f"SELECT COUNT(*) AS n FROM tweets{where_sql}", conn, params=params)
-                to_delete = int(count_df.iloc[0,0])
-                if to_delete == 0:
-                    st.info("No matching rows.")
-                else:
-                    conn.execute(f"DELETE FROM tweets{where_sql}", params)
-                    conn.commit()
-                    st.success(f"Deleted {to_delete} rows matched by filters.")
-
-            st.markdown("---")
-
-            # Truncate all rows (danger)
-            st.write("### Danger zone")
-            if st.checkbox("I understand this will delete ALL rows permanently."):
-                if st.button("🧨 Delete ALL rows"):
-                    conn.execute("DELETE FROM tweets")
-                    conn.commit()
-                    st.success("All rows deleted.")
-
-            # VACUUM to reclaim space
-            if st.button("🧰 VACUUM (reclaim file space)"):
-                conn.execute("VACUUM")
-                st.success("VACUUM completed.")
-
-    except Exception as e:
-        st.error(f"DB maintenance error: {e}")
 
