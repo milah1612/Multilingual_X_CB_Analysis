@@ -14,12 +14,13 @@ seaborn
 plotly
 
 # Text Processing
-emoji 
+emoji
 deep-translator
 langdetect
 
+# Database
+sqlalchemy
+psycopg2-binary   # ✅ required for PostgreSQL connection
 
-sqlalchemy  # optional, for ORM style
-
+# Excel I/O
 openpyxl
-
