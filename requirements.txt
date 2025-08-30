@@ -20,7 +20,7 @@ langdetect
 
 # Database
 sqlalchemy
-psycopg2-binary
+psycopg2-binary  
 
 # Excel I/O
 openpyxl
