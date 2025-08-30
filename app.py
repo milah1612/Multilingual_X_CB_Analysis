@@ -32,9 +32,11 @@ LANG_COLORS = {
     "german": "#955251",
     "italian": "#B565A7",
     "portuguese": "#009B77",
+    "unknown": "#DD4124"
 }
 
-SUPPORTED_LANGS = set(LANG_MAP.keys()) - {"unknown"}  # ISO codes
+# Use full names for DB consistency
+SUPPORTED_LANGS = set(LANG_MAP.values()) - {"unknown"}
 
 # ==============================
 # DB Functions
@@ -81,7 +83,7 @@ def migrate_csv_to_sqlite():
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
-        print("✅ Migrated CSV into SQLite (first time only)")
+        print("✅ Migrated CSV into SQLite (first time only)", flush=True)
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -133,16 +135,16 @@ def delete_rows_by_source(source_file):
 # ==============================
 def safe_translate(text, lang_code, row_id=None, context="general"):
     try:
-        if lang_code == "ar":
+        if lang_code == "arabic":
             translated = GoogleTranslator(source="ar", target="en").translate(text)
-        elif lang_code == "hi":
+        elif lang_code == "hindi":
             translated = GoogleTranslator(source="hi", target="en").translate(text)
         else:
             translated = GoogleTranslator(source="auto", target="en").translate(text)
-        print(f"✅ [{context}] Row {row_id if row_id else '-'} | {lang_code} → {translated[:60]}")
+        print(f"✅ [{context}] Row {row_id if row_id else '-'} | {lang_code} → {translated[:60]}", flush=True)
         return translated
     except Exception as e:
-        print(f"⚠️ [{context}] Row {row_id if row_id else '-'} | {lang_code} | Error: {e}")
+        print(f"⚠️ [{context}] Row {row_id if row_id else '-'} | {lang_code} | Error: {e}", flush=True)
         return "[translation error]"
 
 # ==============================
@@ -163,12 +165,14 @@ cursor.execute("""
     AND language IN ({})
 """.format(",".join(["?"]*len(SUPPORTED_LANGS))), tuple(SUPPORTED_LANGS))
 rows_to_fix = cursor.fetchall()
+print(f"✨ Backfill check: {len(rows_to_fix)} rows need translation", flush=True)
+
 for rid, raw_text, lang in rows_to_fix:
     translated = safe_translate(raw_text, lang, row_id=rid, context="backfill")
     cursor.execute("UPDATE tweets SET translated_tweet = ? WHERE id = ?", (translated, rid))
+
 conn.commit()
 conn.close()
-print(f"✨ Backfill complete: {len(rows_to_fix)} rows checked")
 st.session_state.df = load_tweets()
 
 # ==============================
@@ -244,11 +248,7 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
 
-tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Tools 🛠️"])
-
-# ==============================
 # Sidebar - Single Tweet Analysis
-# ==============================
 st.sidebar.image("twitter_icon.png", width="stretch")
 st.sidebar.header("🔍 X Cyberbullying Detection")
 st.sidebar.markdown("""
@@ -270,7 +270,7 @@ if st.sidebar.button("Analyze Tweet"):
             lang = detected_code if detected_code in LANG_MAP else "unknown"
         except:
             lang = "unknown"
-        translated = safe_translate(tweet_input, lang, context="sidebar")
+        translated = safe_translate(tweet_input, LANG_MAP.get(lang, lang), context="sidebar")
         new_row = insert_tweet(tweet_input, lang, label, sentiment,
                                model_cleaned, eda_cleaned, translated, source_file="manual")
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
