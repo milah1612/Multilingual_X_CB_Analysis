@@ -93,23 +93,38 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
 # Migration from CSV → Postgres
 # ==============================
 def migrate_csv_to_postgres():
-    with engine.begin() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM tweets"))
-        count = result.scalar()
-
-    if count == 0 and os.path.exists("tweet_data.csv"):
+    if os.path.exists("tweet_data.csv"):
         df = pd.read_csv("tweet_data.csv")
 
-        # Add missing columns if needed
-        if "translated_tweet" not in df.columns:
-            df["translated_tweet"] = "[not translated]"
-        if "source_file" not in df.columns:
-            df["source_file"] = "tweet_data.csv"
-        if "timestamp" not in df.columns:
-            df["timestamp"] = pd.to_datetime("now").isoformat()
+        # Ensure all required columns exist
+        required_cols = [
+            "text", "language", "binary_label", "sentiment",
+            "model_clean", "eda_clean", "translated_tweet",
+            "source_file", "timestamp"
+        ]
+        for col in required_cols:
+            if col not in df.columns:
+                if col == "binary_label":
+                    df[col] = 0
+                elif col == "source_file":
+                    df[col] = "initial_csv"
+                elif col == "timestamp":
+                    df[col] = datetime.now().isoformat()
+                else:
+                    df[col] = ""
 
-        df.to_sql("tweets", engine, if_exists="append", index=False)
-        print("✅ Migrated tweet_data.csv into Postgres (first time only)")
+        # Reorder columns to match DB
+        df = df[required_cols]
+
+        # Push into DB only if table empty
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM tweets")).scalar()
+            if count == 0:
+                df.to_sql("tweets", engine, if_exists="append", index=False)
+                print("✅ Migrated CSV into Postgres (first time only)")
+            else:
+                print("➡️ DB already has data, skipping migration")
+
 
 
 # ==============================
