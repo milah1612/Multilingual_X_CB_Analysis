@@ -37,6 +37,20 @@ LANG_COLORS = {
 SUPPORTED_LANGS = set(LANG_MAP.keys()) - {"unknown"}  # ISO codes
 
 # ==============================
+# Translation Helper
+# ==============================
+def safe_translate(text, lang_code):
+    try:
+        if lang_code == "ar":
+            return GoogleTranslator(source="ar", target="en").translate(text)
+        elif lang_code == "hi":
+            return GoogleTranslator(source="hi", target="en").translate(text)
+        else:
+            return GoogleTranslator(source="auto", target="en").translate(text)
+    except:
+        return "[translation error]"
+
+# ==============================
 # DB Functions
 # ==============================
 DB_FILE = "tweets.db"
@@ -147,10 +161,7 @@ cursor.execute("""
 """.format(",".join(["?"]*len(SUPPORTED_LANGS))), tuple(SUPPORTED_LANGS))
 rows_to_fix = cursor.fetchall()
 for rid, raw_text, lang in rows_to_fix:
-    try:
-        translated = GoogleTranslator(source="auto", target="en").translate(raw_text)
-    except:
-        translated = "[translation error]"
+    translated = safe_translate(raw_text, lang)
     cursor.execute("UPDATE tweets SET translated_tweet = ? WHERE id = ?", (translated, rid))
 conn.commit()
 conn.close()
@@ -220,7 +231,7 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
                            value=1, key=f"{key_prefix}_page")
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
-    st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
+    st.dataframe(df.iloc[start_idx:end_idx], width="stretch", height=400)
     st.caption(f"Page {page} of {total_pages} — showing {rows_per_page} rows per page")
 
 # ==============================
@@ -366,10 +377,7 @@ with tabs[3]:
                         lang = detected_code if detected_code in LANG_MAP else "unknown"
                     except:
                         lang = "unknown"
-                    try:
-                        translated = GoogleTranslator(source="auto", target="en").translate(raw_text)
-                    except:
-                        translated = "[translation error]"
+                    translated = safe_translate(raw_text, lang)
                     new_row = insert_tweet(raw_text, lang, label, sentiment,
                                            model_cleaned, eda_cleaned, translated,
                                            source_file=f"upload:{uploaded_file.name}")
@@ -405,3 +413,50 @@ with tabs[3]:
                 delete_rows_by_source(source_choice)
                 st.session_state.df = load_tweets()
                 st.success(f"✅ Deleted all rows from source: {source_choice}")
+
+# ==============================
+# Sidebar - Single Tweet Analysis
+# ==============================
+st.sidebar.image("twitter_icon.png", width="stretch")
+st.sidebar.header("🔍 X Cyberbullying Detection")
+st.sidebar.markdown("""
+**X CYBERBULLYING DETECTION**  
+This application detects cyberbullying in tweets across multiple languages.  
+Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
+""")
+
+tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
+
+if st.sidebar.button("Analyze Tweet"):
+    if tweet_input.strip():
+        model_cleaned = clean_for_model(tweet_input)
+        eda_cleaned = clean_for_eda(tweet_input)
+        label, cb_prob = predict(model_cleaned)
+        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+
+        try:
+            detected_code = detect(tweet_input)
+            lang = detected_code if detected_code in LANG_MAP else "unknown"
+        except:
+            lang = "unknown"
+
+        translated = safe_translate(tweet_input, lang)
+
+        new_row = insert_tweet(tweet_input, lang, label, sentiment,
+                               model_cleaned, eda_cleaned, translated, source_file="manual")
+        st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
+
+        st.session_state.analysis_result = {
+            "sentiment": sentiment,
+            "lang": LANG_MAP.get(lang, lang),
+            "translated": translated
+        }
+        st.rerun()
+    else:
+        st.sidebar.warning("Please enter some text.")
+
+if "analysis_result" in st.session_state:
+    result = st.session_state.analysis_result
+    st.sidebar.success(f"✅ Prediction: {result['sentiment']}")
+    st.sidebar.write(f"🌍 Language: {result['lang']}")
+    st.sidebar.write(f"🌐 Translated: {result['translated']}")
