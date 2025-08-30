@@ -302,22 +302,27 @@ with tabs[3]:
     if lang_choice != "All":
         df_filtered = df_filtered[df_filtered["language"] == lang_choice]
 
-    # ✅ Date filter
-    df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
-    if not df_filtered.empty:
-        min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
-        date_range = st.date_input("Select Date Range", 
-                                   value=(min_date.date(), max_date.date()),
-                                   min_value=min_date.date(),
-                                   max_value=max_date.date())
-        df_filtered = df_filtered[
-            (df_filtered["timestamp"].dt.date >= date_range[0]) &
-            (df_filtered["timestamp"].dt.date <= date_range[1])
-        ]
+    # ✅ Date filter (only if timestamp exists)
+    if "timestamp" in df_filtered.columns:
+        df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
+        if not df_filtered["timestamp"].isna().all():
+            min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
+            date_range = st.date_input(
+                "Select Date Range",
+                value=(min_date.date(), max_date.date()),
+                min_value=min_date.date(),
+                max_value=max_date.date()
+            )
+            df_filtered = df_filtered[
+                (df_filtered["timestamp"].dt.date >= date_range[0]) &
+                (df_filtered["timestamp"].dt.date <= date_range[1])
+            ]
 
-    # ✅ Column filter
-    all_cols = ["language", "sentiment", "text", "model_clean", "eda_clean", "translated_tweet", "timestamp"]
-    selected_cols = st.multiselect("Select Columns to Download", options=all_cols, default=all_cols)
+    # ✅ Column filter (restricted to only main ones)
+    base_cols = ["language", "sentiment", "text", "translated_tweet"]
+    include_timestamp = st.checkbox("Include Timestamp", value=True)
+
+    selected_cols = base_cols + (["timestamp"] if include_timestamp and "timestamp" in df_filtered.columns else [])
 
     # ✅ Download buttons
     if not df_filtered.empty and selected_cols:
@@ -327,7 +332,7 @@ with tabs[3]:
         # CSV with utf-8-sig so Excel shows Arabic correctly
         csv_buffer = io.StringIO()
         df_out.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
-        st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(), 
+        st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(),
                            file_name="tweets_filtered.csv", mime="text/csv")
 
         # Excel (already handles UTF-8 well)
@@ -337,7 +342,8 @@ with tabs[3]:
         st.download_button("⬇️ Download Excel", data=xlsx_buffer.getvalue(),
                            file_name="tweets_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
-        st.info("⚠️ No data matches your filter or no columns selected.")
+        st.info("⚠️ No data matches your filter.")
+
 
 
 # ==============================
