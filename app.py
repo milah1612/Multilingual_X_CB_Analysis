@@ -340,7 +340,7 @@ with tabs[3]:
         with pd.ExcelWriter(xlsx_buffer, engine="openpyxl") as writer:
             df_out.to_excel(writer, index=False, sheet_name="Tweets")
         st.download_button("⬇️ Download Excel", data=xlsx_buffer.getvalue(),
-                           file_name="tweets_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                           file_name="Sentiment_Analysis_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.info("⚠️ No data matches your filter.")
 
