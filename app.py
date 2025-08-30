@@ -63,120 +63,94 @@ def init_db():
     conn.commit()
     conn.close()
 
-def migrate_csv_to_sqlite():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM tweets")
-    count = cursor.fetchone()[0]
-    conn.close()
+def migrate_csv_to_sqlite(force=True):
+    """Always reload CSV → SQLite (ensures data loads)"""
+    if not os.path.exists(CSV_FILE):
+        print("⚠️ CSV file not found")
+        return
 
-    if count == 0 and os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-        if "translated_tweet" not in df.columns:
-            df["translated_tweet"] = "[not translated]"
-        if "timestamp" not in df.columns:
-            df["timestamp"] = datetime.now().isoformat()
-        if "binary_label" not in df.columns and "sentiment" in df.columns:
-            df["binary_label"] = df["sentiment"].apply(lambda x: 1 if "Cyberbullying" in str(x) else 0)
-        df["source_file"] = "initial_csv"
-        conn = sqlite3.connect(DB_FILE)
-        df.to_sql("tweets", conn, if_exists="append", index=False)
-        conn.close()
-        print("✅ Migrated CSV into SQLite (first time only)")
+    df = pd.read_csv(CSV_FILE)
+    if df.empty:
+        print("⚠️ CSV is empty!")
+        return
+
+    if "translated_tweet" not in df.columns:
+        df["translated_tweet"] = "[not translated]"
+
+    if "timestamp" not in df.columns:
+        df["timestamp"] = datetime.now().isoformat()
+
+    if "binary_label" not in df.columns and "sentiment" in df.columns:
+        df["binary_label"] = df["sentiment"].apply(lambda x: 1 if "Cyberbullying" in str(x) else 0)
+
+    df["source_file"] = "initial_csv"
+
+    conn = sqlite3.connect(DB_FILE)
+    df.to_sql("tweets", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"✅ Migrated {len(df)} rows from CSV into SQLite")
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", conn)
     conn.close()
-    # Map ISO → human-readable
+    if df.empty:
+        print("⚠️ No tweets found in DB after load")
+    else:
+        print(f"📊 Loaded {len(df)} rows from DB")
     df["language_display"] = df["language"].map(LANG_MAP).fillna(df["language"])
     return df
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source_file="manual"):
-    timestamp = datetime.now().isoformat()
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp, source_file)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp, source_file))
-    conn.commit()
-    conn.close()
-    return pd.DataFrame([{
-        "text": text,
-        "language": language,
-        "binary_label": binary_label,
-        "sentiment": sentiment,
-        "model_clean": model_clean,
-        "eda_clean": eda_clean,
-        "translated_tweet": translated_tweet,
-        "timestamp": timestamp,
-        "source_file": source_file,
-        "language_display": LANG_MAP.get(language, language)
-    }])
-
-def delete_rows_by_ids(ids):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.executemany("DELETE FROM tweets WHERE id = ?", [(i,) for i in ids])
-    conn.commit()
-    conn.close()
-
-def delete_rows_by_source(source_file):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tweets WHERE source_file = ?", (source_file,))
-    conn.commit()
-    conn.close()
-
 # ==============================
-# Strict Arabic Translation Backfill
+# Translation Helpers
 # ==============================
 def is_arabic(text):
+    """Check if a string contains Arabic characters."""
     return bool(re.search(r'[\u0600-\u06FF]', str(text)))
 
-def backfill_arabic_strict():
+def safe_translate(text, lang_code, row_id=None, context="general"):
+    try:
+        if lang_code == "ar":
+            translated = GoogleTranslator(source="ar", target="en").translate(text)
+        else:
+            translated = GoogleTranslator(source="auto", target="en").translate(text)
+        print(f"✅ [{context}] Row {row_id if row_id else '-'} | {lang_code} → {translated[:60]}")
+        return translated
+    except Exception as e:
+        print(f"⚠️ [{context}] Row {row_id if row_id else '-'} | {lang_code} | Error: {e}")
+        return "[translation error]"
+
+def backfill_arabic_translations():
+    """Fix untranslated Arabic rows at startup"""
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, text, translated_tweet 
-        FROM tweets 
-        WHERE language = 'ar'
-    """)
-    rows = cursor.fetchall()
+    df = pd.read_sql("SELECT id, text, translated_tweet FROM tweets WHERE language='ar'", conn)
 
     updates = []
-    for rid, raw_text, translated in rows:
+    for _, row in df.iterrows():
         if (
-            translated is None
-            or translated.strip() in ["", "[not translated]", "[translation error]"]
-            or is_arabic(translated)
+            pd.isna(row["translated_tweet"])
+            or str(row["translated_tweet"]).strip() in ["", "[not translated]"]
+            or is_arabic(row["translated_tweet"])
         ):
-            try:
-                fixed = GoogleTranslator(source="ar", target="en").translate(raw_text)
-                updates.append((fixed, rid))
-                print(f"✅ Arabic fix row {rid}: {fixed[:60]}...", flush=True)
-            except Exception as e:
-                print(f"⚠️ Arabic fail row {rid}: {e}", flush=True)
+            translated = safe_translate(str(row["text"]), "ar", row_id=row["id"], context="backfill-ar")
+            updates.append((translated, row["id"]))
 
     if updates:
+        cursor = conn.cursor()
         cursor.executemany("UPDATE tweets SET translated_tweet=? WHERE id=?", updates)
         conn.commit()
-        print(f"✨ Backfilled {len(updates)} Arabic rows", flush=True)
+        print(f"✨ Backfilled {len(updates)} Arabic translations")
     else:
-        print("ℹ️ No Arabic rows needed fix", flush=True)
-
+        print("⏭ No Arabic rows needed fix")
     conn.close()
 
 # ==============================
-# Init + Backfill
+# Init
 # ==============================
 init_db()
-migrate_csv_to_sqlite()
-backfill_arabic_strict()
-
-if "df" not in st.session_state:
-    st.session_state.df = load_tweets()
+migrate_csv_to_sqlite(force=True)
+backfill_arabic_translations()
+st.session_state.df = load_tweets()
 
 # ==============================
 # Model
@@ -254,7 +228,7 @@ st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Tools 🛠️"])
 
 # ==============================
-# Sidebar - Single Tweet Analysis
+# Sidebar
 # ==============================
 st.sidebar.image("twitter_icon.png", width="stretch")
 st.sidebar.header("🔍 X Cyberbullying Detection")
@@ -277,18 +251,19 @@ if st.sidebar.button("Analyze Tweet"):
             lang = detected_code if detected_code in LANG_MAP else "unknown"
         except:
             lang = "unknown"
-        if lang == "ar":
-            try:
-                translated = GoogleTranslator(source="ar", target="en").translate(tweet_input)
-            except:
-                translated = "[translation error]"
-        else:
-            try:
-                translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
-            except:
-                translated = "[translation error]"
-        new_row = insert_tweet(tweet_input, lang, label, sentiment,
-                               model_cleaned, eda_cleaned, translated, source_file="manual")
+        translated = safe_translate(tweet_input, lang, context="sidebar")
+        new_row = pd.DataFrame([{
+            "text": tweet_input,
+            "language": lang,
+            "binary_label": label,
+            "sentiment": sentiment,
+            "model_clean": model_cleaned,
+            "eda_clean": eda_cleaned,
+            "translated_tweet": translated,
+            "timestamp": datetime.now().isoformat(),
+            "source_file": "manual",
+            "language_display": LANG_MAP.get(lang, lang)
+        }])
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
         st.session_state.analysis_result = {
             "sentiment": sentiment,
