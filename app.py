@@ -8,6 +8,7 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
+import re
 
 # ==============================
 # Language Mapping
@@ -36,6 +37,10 @@ LANG_COLORS = {
     "unknown": "#DD4124"
 }
 
+def map_language(code: str) -> str:
+    code = str(code).lower()
+    return LANG_MAP.get(code, "unknown")
+
 # ==============================
 # DB Functions
 # ==============================
@@ -61,6 +66,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+def is_arabic(text):
+    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
+
 def migrate_csv_to_sqlite():
     """Seed DB from CSV only if DB is empty"""
     conn = sqlite3.connect(DB_FILE)
@@ -80,15 +88,8 @@ def migrate_csv_to_sqlite():
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
 
-# ------------------------------
-# Arabic Backfill Logic
-# ------------------------------
-def is_arabic(text):
-    """Check if a string contains Arabic characters."""
-    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
-
 def backfill_missing_arabic_translations():
-    """Translate only Arabic rows missing or still Arabic in translated_tweet"""
+    """Translate only Arabic rows that are missing or still Arabic in translated_tweet"""
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT id, text, language, translated_tweet FROM tweets", conn)
 
@@ -96,7 +97,7 @@ def backfill_missing_arabic_translations():
     for _, row in df.iterrows():
         if row["language"] == "arabic":
             if (
-                pd.isna(row["translated_tweet"]) 
+                pd.isna(row["translated_tweet"])
                 or str(row["translated_tweet"]).strip() in ["", "[not translated]"]
                 or is_arabic(row["translated_tweet"])
             ):
@@ -268,6 +269,11 @@ with tabs[1]:
     kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
+    # 🔽 Language Filter
+    langs_available = sorted(df_cb["language"].unique())
+    selected_langs = st.multiselect("Filter by language", options=langs_available, default=langs_available, key="cb_filter")
+    df_cb = df_cb[df_cb["language"].isin(selected_langs)]
+
     if not df_cb.empty:
         st.subheader("🌍 CB Distribution by Language")
         cb_lang_dist = df_cb["language"].value_counts().reset_index()
@@ -275,21 +281,6 @@ with tabs[1]:
         fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
                              text="count", height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_cb_lang, use_container_width=True)
-
-    hashtags = [h for tags in df_cb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis", height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
 
     st.subheader("📋 Cyberbullying Tweets")
     render_paginated_table(df_cb, key_prefix="cb",
@@ -308,6 +299,11 @@ with tabs[2]:
     kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
+    # 🔽 Language Filter
+    langs_available = sorted(df_ncb["language"].unique())
+    selected_langs = st.multiselect("Filter by language", options=langs_available, default=langs_available, key="ncb_filter")
+    df_ncb = df_ncb[df_ncb["language"].isin(selected_langs)]
+
     if not df_ncb.empty:
         st.subheader("🌍 NCB Distribution by Language")
         ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
@@ -316,24 +312,9 @@ with tabs[2]:
                               text="count", height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_ncb_lang, use_container_width=True)
 
-    hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
-    top_hashtags = Counter(hashtags).most_common(15)
-    if top_hashtags:
-        st.subheader("#️⃣ Distinctive Hashtags")
-        hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-        fig_bubble = px.scatter(hashtags_df, x="hashtag", y="count", size="count",
-                                color="hashtag", hover_name="hashtag",
-                                size_max=60, height=500)
-        st.plotly_chart(fig_bubble, use_container_width=True)
-
-        st.subheader("🧩 Hashtag Clustering")
-        fig_cluster = px.treemap(hashtags_df, path=["hashtag"], values="count",
-                                 color="count", color_continuous_scale="Viridis", height=500)
-        st.plotly_chart(fig_cluster, use_container_width=True)
-
     st.subheader("📋 Non-Cyberbullying Tweets")
     render_paginated_table(df_ncb, key_prefix="ncb",
-                           columns=["language", "sentiment", "model_clean", "translated_tweet"])   
+                           columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Sidebar - Single Tweet Analysis
@@ -356,11 +337,11 @@ if st.sidebar.button("Analyze Tweet"):
         sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
         try:
             detected_code = detect(tweet_input)
-            lang = LANG_MAP.get(detected_code, detected_code)
+            lang = map_language(detected_code)
         except:
             lang = "unknown"
         try:
-            translated = GoogleTranslator(source="ar" if lang=="arabic" else "auto", target="en").translate(tweet_input)
+            translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
         except Exception:
             translated = "[translation error]"
 
