@@ -85,12 +85,39 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
         "timestamp": timestamp
     }])
 
+
+# ==============================
+# Migration from CSV → Postgres
+# ==============================
+def migrate_csv_to_postgres():
+    with engine.begin() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM tweets"))
+        count = result.scalar()
+
+    if count == 0 and os.path.exists("tweet_data.csv"):
+        df = pd.read_csv("tweet_data.csv")
+
+        # Add missing columns if needed
+        if "translated_tweet" not in df.columns:
+            df["translated_tweet"] = "[not translated]"
+        if "source_file" not in df.columns:
+            df["source_file"] = "tweet_data.csv"
+        if "timestamp" not in df.columns:
+            df["timestamp"] = pd.to_datetime("now").isoformat()
+
+        df.to_sql("tweets", engine, if_exists="append", index=False)
+        print("✅ Migrated tweet_data.csv into Postgres (first time only)")
+
+
 # ==============================
 # Init and Cache
 # ==============================
 init_db()
+migrate_csv_to_postgres()
+
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()
+
 
 # ==============================
 # Load Hugging Face Model
