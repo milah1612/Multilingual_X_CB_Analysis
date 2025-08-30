@@ -18,9 +18,5 @@ emoji
 deep-translator
 langdetect
 
-# Database
-sqlalchemy
-psycopg2-binary  
-
 # Excel I/O
 openpyxl
