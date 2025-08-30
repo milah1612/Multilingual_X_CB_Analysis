@@ -5,7 +5,6 @@ from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
-from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
 
@@ -301,6 +300,7 @@ with tabs[3]:
     tool_choice = st.radio("Choose Tool:", ["Download Data", "Upload Data", "Delete Data"])
     df_all = st.session_state.df.copy()
 
+    # --- Download ---
     if tool_choice == "Download Data":
         sentiments = ["All"] + sorted(df_all["sentiment"].unique())
         sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0)
@@ -341,6 +341,7 @@ with tabs[3]:
         else:
             st.info("⚠️ No data matches your filter.")
 
+    # --- Upload ---
     elif tool_choice == "Upload Data":
         st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
         uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
@@ -382,40 +383,26 @@ with tabs[3]:
                     st.session_state.df = pd.concat([pd.concat(results), st.session_state.df], ignore_index=True)
                     st.success("✅ Uploaded data analyzed and saved!")
 
+    # --- Delete ---
     elif tool_choice == "Delete Data":
         st.write("🗑 Delete tweets from DB")
         sentiments = ["All"] + sorted(df_all["sentiment"].unique())
         sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0, key="del_sent")
-        langs_available = sorted([l for l in LANG_MAP.values
-
-    elif tool_choice == "Delete Data":
-        st.write("🗑 Delete tweets from DB")
-
-        # Filters
-        sentiments = ["All"] + sorted(df_all["sentiment"].unique())
-        sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0, key="del_sent")
-
         langs_available = sorted([l for l in LANG_MAP.values() if l != "unknown"])
         lang_options = ["All"] + langs_available
         lang_choice = st.selectbox("Filter by Language", options=lang_options, index=0, key="del_lang")
-
         df_filtered = df_all.copy()
         if sentiment_choice != "All":
             df_filtered = df_filtered[df_filtered["sentiment"] == sentiment_choice]
         if lang_choice != "All":
             df_filtered = df_filtered[df_filtered["language"] == lang_choice]
-
         st.write("📊 Preview of Data (with ID + Source)")
         st.dataframe(df_filtered[["id", "source_file", "language", "sentiment", "text", "translated_tweet"]].head(20))
-
-        # Row-based delete
         ids_to_delete = st.multiselect("Select rows by ID to delete", df_filtered["id"].tolist())
         if st.button("Delete Selected Rows") and ids_to_delete:
             delete_rows_by_ids(ids_to_delete)
             st.session_state.df = load_tweets()
             st.success(f"✅ Deleted {len(ids_to_delete)} rows.")
-
-        # Bulk delete by source file
         sources = df_all["source_file"].dropna().unique().tolist()
         if sources:
             source_choice = st.selectbox("Delete by Source File", ["None"] + sources, key="del_source")
