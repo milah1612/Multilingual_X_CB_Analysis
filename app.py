@@ -72,7 +72,7 @@ def migrate_csv_to_sqlite():
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
         if "translated_tweet" not in df.columns:
-            df["translated_tweet"] = "[not translated]"]
+            df["translated_tweet"] = "[not translated]"
         if "timestamp" not in df.columns:
             df["timestamp"] = datetime.now().isoformat()
         if "binary_label" not in df.columns and "sentiment" in df.columns:
@@ -82,6 +82,7 @@ def migrate_csv_to_sqlite():
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
+
 
 # ==============================
 # Arabic Backfill
