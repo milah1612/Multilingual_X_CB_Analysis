@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import re, html, sqlite3, os
+import re, html, sqlite3, os, io
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -8,7 +8,6 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
-import re
 
 # ==============================
 # Language Mapping
@@ -66,11 +65,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def is_arabic(text):
-    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
-
 def migrate_csv_to_sqlite():
-    """Seed DB from CSV only if DB is empty"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM tweets")
@@ -87,33 +82,6 @@ def migrate_csv_to_sqlite():
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
-
-def backfill_missing_arabic_translations():
-    """Translate only Arabic rows that are missing or still Arabic in translated_tweet"""
-    conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql("SELECT id, text, language, translated_tweet FROM tweets", conn)
-
-    updates = []
-    for _, row in df.iterrows():
-        if row["language"] == "arabic":
-            if (
-                pd.isna(row["translated_tweet"])
-                or str(row["translated_tweet"]).strip() in ["", "[not translated]"]
-                or is_arabic(row["translated_tweet"])
-            ):
-                try:
-                    translated = GoogleTranslator(source="ar", target="en").translate(str(row["text"]))
-                    updates.append((translated, row["id"]))
-                    print(f"✅ Fixed Arabic row {row['id']}: {translated[:50]}...")
-                except Exception as e:
-                    print(f"⚠️ Failed row {row['id']}: {e}")
-
-    if updates:
-        cursor = conn.cursor()
-        cursor.executemany("UPDATE tweets SET translated_tweet=? WHERE id=?", updates)
-        conn.commit()
-    conn.close()
-    print(f"✨ Backfilled {len(updates)} missing Arabic translations")
 
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
@@ -148,7 +116,6 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
 # ==============================
 init_db()
 migrate_csv_to_sqlite()
-backfill_missing_arabic_translations()
 
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()
@@ -230,7 +197,7 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
 
-tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
+tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Download 📥"])
 
 # ==============================
 # All Tab
@@ -269,8 +236,8 @@ with tabs[1]:
     kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
-    # 🔽 Language Filter
-    langs_available = sorted(df_cb["language"].unique())
+    # 🔽 Language Filter (always show all languages)
+    langs_available = sorted(set(LANG_MAP.values()))
     selected_langs = st.multiselect("Filter by language", options=langs_available, default=langs_available, key="cb_filter")
     df_cb = df_cb[df_cb["language"].isin(selected_langs)]
 
@@ -299,8 +266,8 @@ with tabs[2]:
     kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
-    # 🔽 Language Filter
-    langs_available = sorted(df_ncb["language"].unique())
+    # 🔽 Language Filter (always show all languages)
+    langs_available = sorted(set(LANG_MAP.values()))
     selected_langs = st.multiselect("Filter by language", options=langs_available, default=langs_available, key="ncb_filter")
     df_ncb = df_ncb[df_ncb["language"].isin(selected_langs)]
 
@@ -315,6 +282,60 @@ with tabs[2]:
     st.subheader("📋 Non-Cyberbullying Tweets")
     render_paginated_table(df_ncb, key_prefix="ncb",
                            columns=["language", "sentiment", "model_clean", "translated_tweet"])
+
+# ==============================
+# Download Tab
+# ==============================
+with tabs[3]:
+    df_all = st.session_state.df.copy()
+
+    st.subheader("📥 Download Filtered Tweets")
+
+    # --- Filters ---
+    sentiments = st.multiselect("Filter by Sentiment", 
+                                options=df_all["sentiment"].unique(), 
+                                default=df_all["sentiment"].unique())
+
+    langs = st.multiselect("Filter by Language", 
+                           options=sorted(set(LANG_MAP.values())), 
+                           default=sorted(set(LANG_MAP.values())))
+
+    df_all["timestamp"] = pd.to_datetime(df_all["timestamp"], errors="coerce")
+    min_date, max_date = df_all["timestamp"].min(), df_all["timestamp"].max()
+
+    date_range = st.date_input("Select Date Range", 
+                               value=(min_date.date(), max_date.date()),
+                               min_value=min_date.date(),
+                               max_value=max_date.date())
+
+    mask = (df_all["sentiment"].isin(sentiments)) & \
+           (df_all["language"].isin(langs)) & \
+           (df_all["timestamp"].dt.date >= date_range[0]) & \
+           (df_all["timestamp"].dt.date <= date_range[1])
+    df_filtered = df_all.loc[mask]
+
+    all_cols = ["language", "sentiment", "text", "model_clean", "eda_clean", "translated_tweet", "timestamp"]
+    selected_cols = st.multiselect("Select Columns to Download", options=all_cols, default=all_cols)
+
+    if not df_filtered.empty and selected_cols:
+        df_out = df_filtered[selected_cols]
+
+        st.write("📊 Preview", df_out.head(10))
+
+        # Download as CSV
+        csv_buffer = io.StringIO()
+        df_out.to_csv(csv_buffer, index=False)
+        st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(), 
+                           file_name="tweets_filtered.csv", mime="text/csv")
+
+        # Download as Excel
+        xlsx_buffer = io.BytesIO()
+        with pd.ExcelWriter(xlsx_buffer, engine="openpyxl") as writer:
+            df_out.to_excel(writer, index=False, sheet_name="Tweets")
+        st.download_button("⬇️ Download Excel", data=xlsx_buffer.getvalue(),
+                           file_name="tweets_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    else:
+        st.info("⚠️ No data matches your filter or no columns selected.")
 
 # ==============================
 # Sidebar - Single Tweet Analysis
