@@ -34,7 +34,8 @@ LANG_COLORS = {
     "portuguese": "#009B77",
 }
 
-SUPPORTED_LANGS = set(LANG_MAP.values()) - {"unknown"}
+SUPPORTED_LANGS = set(LANG_MAP.keys()) - {"unknown"}  # use ISO codes
+
 
 # ==============================
 # DB Functions
@@ -91,7 +92,10 @@ def load_tweets():
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", conn)
     conn.close()
+    # Map ISO → full names for display
+    df["language_display"] = df["language"].map(LANG_MAP).fillna(df["language"])
     return df
+
 
 def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source_file="manual"):
     timestamp = datetime.now().isoformat()
@@ -148,13 +152,14 @@ cursor.execute("""
     AND language IN ({})
 """.format(",".join(["?"]*len(SUPPORTED_LANGS))), tuple(SUPPORTED_LANGS))
 rows_to_fix = cursor.fetchall()
-for row in rows_to_fix:
-    rid, raw_text, lang = row
+
+for rid, raw_text, lang in rows_to_fix:
     try:
         translated = GoogleTranslator(source="auto", target="en").translate(raw_text)
     except:
         translated = "[translation error]"
     cursor.execute("UPDATE tweets SET translated_tweet = ? WHERE id = ?", (translated, rid))
+
 conn.commit()
 conn.close()
 st.session_state.df = load_tweets()
@@ -214,7 +219,8 @@ def language_filter_ui(df, key):
     if choice == "All":
         return df
     else:
-        return df[df["language"] == choice]
+        return df[df["language_display"] == choice]
+
 
 def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     if columns:
@@ -248,13 +254,13 @@ with tabs[0]:
                          height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_pie, use_container_width=True)
     with col2:
-        lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
+        lang_dist = df.groupby(["language_display", "sentiment"]).size().reset_index(name="count")
         fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
                          text="count", height=500,
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
     st.subheader("📝 All Tweets")
-    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    render_paginated_table(df, key_prefix="all", columns=["language_display", "sentiment", "model_clean", "translated_tweet"])
 
 # --- Cyberbullying Tab ---
 with tabs[1]:
