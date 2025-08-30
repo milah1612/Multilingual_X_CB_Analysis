@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import re, html, emoji, io, os
+import re, html, emoji
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -8,42 +8,30 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
+import io
+import os
+
 from sqlalchemy import create_engine, text
 
 # ==============================
-# Database Config (Postgres)
+# Database Setup (Postgres via Secrets)
 # ==============================
-# Adjust for your environment or Streamlit Cloud secrets
-DB_URL = st.secrets["DB_URL"] if "DB_URL" in st.secrets else "postgresql://user:password@localhost:5432/tweetsdb"
-engine = create_engine(DB_URL)
-
-CSV_FILE = "tweet_data.csv"   # initial GitHub CSV
+DATABASE_URL = st.secrets["DATABASE_URL"]
+engine = create_engine(DATABASE_URL)
 
 # ==============================
 # Language Mapping
 # ==============================
 LANG_MAP = {
-    "ar": "arabic",
-    "fr": "french",
-    "en": "english",
-    "es": "spanish",
-    "hi": "hindi",
-    "de": "german",
-    "it": "italian",
-    "pt": "portuguese",
+    "ar": "arabic", "fr": "french", "en": "english", "es": "spanish",
+    "hi": "hindi", "de": "german", "it": "italian", "pt": "portuguese",
     "unknown": "unknown"
 }
 
 LANG_COLORS = {
-    "arabic": "#FF6F61",
-    "french": "#6B5B95",
-    "english": "#88B04B",
-    "spanish": "#F7CAC9",
-    "hindi": "#92A8D1",
-    "german": "#955251",
-    "italian": "#B565A7",
-    "portuguese": "#009B77",
-    "unknown": "#DD4124"
+    "arabic": "#FF6F61", "french": "#6B5B95", "english": "#88B04B",
+    "spanish": "#F7CAC9", "hindi": "#92A8D1", "german": "#955251",
+    "italian": "#B565A7", "portuguese": "#009B77", "unknown": "#DD4124"
 }
 
 # ==============================
@@ -61,50 +49,57 @@ def init_db():
                 model_clean TEXT,
                 eda_clean TEXT,
                 translated_tweet TEXT,
-                timestamp TEXT,
-                source TEXT
+                source TEXT,
+                timestamp TEXT
             )
         """))
 
-def migrate_csv_once():
+def migrate_csv_to_postgres():
+    """Load GitHub CSV once if DB is empty"""
     with engine.begin() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM tweets"))
-        count = result.scalar()
+        count = conn.execute(text("SELECT COUNT(*) FROM tweets")).scalar()
 
-    if count == 0 and os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
+    if count == 0:
+        url = "https://raw.githubusercontent.com/<your-username>/<your-repo>/main/tweet_data.csv"
+        df = pd.read_csv(url)
+
         if "translated_tweet" not in df.columns:
             df["translated_tweet"] = "[not translated]"
-        df["source"] = os.path.basename(CSV_FILE)
+        df["source"] = "github_seed"
+
         df.to_sql("tweets", engine, if_exists="append", index=False)
-        print("✅ Migrated CSV into Postgres (first time only)")
+        print("✅ Migrated CSV into PostgreSQL")
     else:
-        print("➡️ DB already has data, skipping CSV load")
+        print("➡️ DB already has data, skipping migration")
 
 def load_tweets():
     return pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", engine)
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source="manual_input"):
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source="manual"):
     timestamp = datetime.now().isoformat()
-    new_row = pd.DataFrame([{
-        "text": text,
-        "language": language,
-        "binary_label": binary_label,
-        "sentiment": sentiment,
-        "model_clean": model_clean,
-        "eda_clean": eda_clean,
-        "translated_tweet": translated_tweet,
-        "timestamp": timestamp,
-        "source": source
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source, timestamp)
+            VALUES (:text, :language, :binary_label, :sentiment, :model_clean, :eda_clean, :translated_tweet, :source, :timestamp)
+        """), {
+            "text": text, "language": language, "binary_label": binary_label,
+            "sentiment": sentiment, "model_clean": model_clean,
+            "eda_clean": eda_clean, "translated_tweet": translated_tweet,
+            "source": source, "timestamp": timestamp
+        })
+
+    return pd.DataFrame([{
+        "text": text, "language": language, "binary_label": binary_label,
+        "sentiment": sentiment, "model_clean": model_clean,
+        "eda_clean": eda_clean, "translated_tweet": translated_tweet,
+        "source": source, "timestamp": timestamp
     }])
-    new_row.to_sql("tweets", engine, if_exists="append", index=False)
-    return new_row
 
 # ==============================
-# Init DB
+# Init + Cache
 # ==============================
 init_db()
-migrate_csv_once()
+migrate_csv_to_postgres()
 
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()
@@ -158,23 +153,19 @@ def predict(text, threshold=0.35):
     return pred, cb_prob
 
 # ==============================
-# Helper: Extract hashtags
+# Helper
 # ==============================
 def extract_hashtags(text):
     if isinstance(text, str):
         return re.findall(r"#\w+", text)
     return []
 
-# ==============================
-# Pagination Helper
-# ==============================
 def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     if columns:
         df = df[columns].rename(columns={"model_clean": "tweet"})
     total_rows = len(df)
     total_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page else 0)
-    page = st.number_input("Page", min_value=1, max_value=max(total_pages, 1),
-                           value=1, key=f"{key_prefix}_page")
+    page = st.number_input("Page", min_value=1, max_value=max(total_pages, 1), value=1, key=f"{key_prefix}_page")
     start_idx = (page - 1) * rows_per_page
     end_idx = start_idx + rows_per_page
     st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True, height=400)
@@ -198,8 +189,9 @@ with tabs[0]:
         st.subheader("📊 Sentiment Distribution")
         sentiment_counts = df["sentiment"].value_counts().reset_index()
         sentiment_counts.columns = ["sentiment", "count"]
-        fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
-                         height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
+        fig_pie = px.pie(sentiment_counts, values="count", names="sentiment",
+                         color="sentiment", height=500,
+                         color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_pie, use_container_width=True)
     with col2:
         st.subheader("🌍 Language Distribution by Sentiment")
@@ -225,12 +217,11 @@ with tabs[1]:
     kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
-    # ✅ Distribution by language
     if not df_cb.empty:
         cb_lang_dist = df_cb["language"].value_counts().reset_index()
         cb_lang_dist.columns = ["language", "count"]
-        fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
-                             text="count", height=500, color_discrete_map=LANG_COLORS)
+        fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language", text="count",
+                             height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_cb_lang, use_container_width=True)
 
     st.subheader("📋 Cyberbullying Tweets")
@@ -252,18 +243,23 @@ with tabs[2]:
     if not df_ncb.empty:
         ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
         ncb_lang_dist.columns = ["language", "count"]
-        fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
-                              text="count", height=500, color_discrete_map=LANG_COLORS)
+        fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language", text="count",
+                              height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_ncb_lang, use_container_width=True)
 
     st.subheader("📋 Non-Cyberbullying Tweets")
-    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])   
 
 # ==============================
-# Sidebar - Manual Analysis
+# Sidebar
 # ==============================
 st.sidebar.image("twitter_icon.png", use_container_width=True)
 st.sidebar.header("🔍 X Cyberbullying Detection")
+st.sidebar.markdown("""
+**X CYBERBULLYING DETECTION**  
+This application detects cyberbullying in tweets across multiple languages.  
+Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
+""")
 
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 
@@ -285,15 +281,10 @@ if st.sidebar.button("Analyze Tweet"):
         except Exception:
             translated = "[translation error]"
 
-        new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated, source="manual_input")
+        new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
-        st.session_state.analysis_result = {
-            "sentiment": sentiment,
-            "lang": lang,
-            "translated": translated
-        }
-
+        st.session_state.analysis_result = {"sentiment": sentiment, "lang": lang, "translated": translated}
         st.rerun()
     else:
         st.sidebar.warning("Please enter some text.")
@@ -304,9 +295,7 @@ if "analysis_result" in st.session_state:
     st.sidebar.write(f"🌍 Language: {result['lang']}")
     st.sidebar.write(f"🌐 Translated: {result['translated']}")
 
-# ==============================
-# Sidebar - Bulk Upload
-# ==============================
+# ---- Bulk Upload Analysis ----
 st.sidebar.subheader("📤 Upload Tweets for Auto Analysis")
 uploaded_file = st.sidebar.file_uploader("Upload CSV/XLSX", type=["csv", "xlsx"])
 
