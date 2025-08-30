@@ -204,6 +204,14 @@ tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Dow
 # ==============================
 with tabs[0]:
     df = st.session_state.df
+
+    st.subheader("📊 Overall Insights")
+
+    # 🔽 Language Filter (always show all languages)
+    langs_available = sorted(set(LANG_MAP.values()))
+    selected_langs = st.multiselect("Filter by language", options=langs_available, default=langs_available, key="all_filter")
+    df = df[df["language"].isin(selected_langs)]
+
     col1, col2 = st.columns([1, 1.2])
     with col1:
         st.subheader("📊 Sentiment Distribution")
@@ -222,6 +230,7 @@ with tabs[0]:
 
     st.subheader("📝 All Tweets")
     render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+
 
 # ==============================
 # Cyberbullying Tab
