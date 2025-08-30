@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import re, html
+import re, html, emoji
+import os                          # ✅ needed for file existence check
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -8,8 +9,10 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
-from sqlalchemy import create_engine, text
 import io
+
+from sqlalchemy import create_engine, text
+
 
 # ==============================
 # Language Mapping
