@@ -411,25 +411,6 @@ if "upload_success" in st.session_state and st.session_state.upload_success:
     st.session_state.upload_success = False
 
 
-# ==============================
-# DB Maintenance (Debug/Admin)
-# ==============================
-st.sidebar.subheader("🛠 DB Maintenance")
 
-if st.sidebar.checkbox("Show DB Preview"):
-    conn = sqlite3.connect("tweets.db")
-    total = pd.read_sql("SELECT COUNT(*) AS total FROM tweets", conn)
-    st.sidebar.write(f"**Total Rows:** {int(total['total'][0])}")
-
-    preview = pd.read_sql("""
-        SELECT id, timestamp, language, sentiment, model_clean, translated_tweet
-        FROM tweets
-        ORDER BY timestamp DESC
-        LIMIT 20
-    """, conn)
-    conn.close()
-
-    st.sidebar.write("**Preview of latest 20 rows:**")
-    st.sidebar.dataframe(preview, height=300, use_container_width=True)
 
 
