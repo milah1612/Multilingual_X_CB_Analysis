@@ -5,7 +5,6 @@ from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
-from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
 
@@ -37,7 +36,7 @@ LANG_COLORS = {
 }
 
 # ==============================
-# DB Functions
+# DB Setup
 # ==============================
 DB_FILE = "tweets.db"
 CSV_FILE = "tweet_data.csv"
@@ -72,43 +71,68 @@ def migrate_csv_to_sqlite():
 
     if count == 0 and os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
-
         if "translated_tweet" not in df.columns:
-            df["translated_tweet"] = "[not translated]"
+            df["translated_tweet"] = "[not translated]"]
         if "timestamp" not in df.columns:
             df["timestamp"] = datetime.now().isoformat()
         if "binary_label" not in df.columns and "sentiment" in df.columns:
-            df["binary_label"] = df["sentiment"].apply(
-                lambda x: 1 if "Cyberbullying" in str(x) else 0
-            )
-
+            df["binary_label"] = df["sentiment"].apply(lambda x: 1 if "Cyberbullying" in str(x) else 0)
         df["source_file"] = "initial_csv"
-
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
 
+# ==============================
+# Arabic Backfill
+# ==============================
+def is_arabic(text):
+    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
+
+def backfill_missing_arabic_translations():
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql("SELECT id, text, language, translated_tweet FROM tweets", conn)
+    updates = []
+    for _, row in df.iterrows():
+        if row["language"] == "arabic":
+            if (
+                pd.isna(row["translated_tweet"])
+                or str(row["translated_tweet"]).strip() in ["", "[not translated]"]
+                or is_arabic(row["translated_tweet"])
+            ):
+                try:
+                    translated = GoogleTranslator(source="ar", target="en").translate(str(row["text"]))
+                    updates.append((translated, row["id"]))
+                    print(f"✅ Fixed Arabic row {row['id']}: {translated[:50]}...")
+                except Exception as e:
+                    print(f"⚠️ Failed row {row['id']}: {e}")
+    if updates:
+        cursor = conn.cursor()
+        cursor.executemany("UPDATE tweets SET translated_tweet=? WHERE id=?", updates)
+        conn.commit()
+    conn.close()
+    print(f"✨ Backfilled {len(updates)} missing Arabic translations")
+
+# ==============================
+# DB Helpers
+# ==============================
 def load_tweets():
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", conn)
     conn.close()
+    df["language_display"] = df["language"].map(LANG_MAP).fillna(df["language"])
     return df
 
-def insert_tweet(text, language, binary_label, sentiment,
-                 model_clean, eda_clean, translated_tweet, source_file="manual"):
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source_file="manual"):
     timestamp = datetime.now().isoformat()
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO tweets
-        (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp, source_file)
+        INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp, source_file)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (text, language, binary_label, sentiment,
-          model_clean, eda_clean, translated_tweet, timestamp, source_file))
+    """, (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, timestamp, source_file))
     conn.commit()
     conn.close()
-
     return pd.DataFrame([{
         "text": text,
         "language": language,
@@ -118,68 +142,47 @@ def insert_tweet(text, language, binary_label, sentiment,
         "eda_clean": eda_clean,
         "translated_tweet": translated_tweet,
         "timestamp": timestamp,
-        "source_file": source_file
+        "source_file": source_file,
+        "language_display": LANG_MAP.get(language, language)
     }])
 
-# ==============================
-# Translation Helpers
-# ==============================
-def is_arabic(text):
-    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
-
-def backfill_arabic():
-    """Fix missing or untranslated Arabic tweets"""
+def delete_rows_by_ids(ids):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    rows = cursor.execute(
-        "SELECT id, text, translated_tweet FROM tweets WHERE language='ar'"
-    ).fetchall()
-
-    updates = []
-    for rid, raw_text, translated in rows:
-        if (translated is None
-            or translated.strip() in ["", "[not translated]", "[translation error]"]
-            or is_arabic(translated)):
-            try:
-                fixed = GoogleTranslator(source="ar", target="en").translate(str(raw_text))
-                updates.append((fixed, rid))
-                print(f"✅ [Arabic Fix] Row {rid}: {fixed[:50]}...")
-            except Exception as e:
-                print(f"⚠️ [Arabic Fix] Row {rid}: {e}")
-
-    if updates:
-        cursor.executemany("UPDATE tweets SET translated_tweet=? WHERE id=?", updates)
-        conn.commit()
+    cursor.executemany("DELETE FROM tweets WHERE id = ?", [(i,) for i in ids])
+    conn.commit()
     conn.close()
-    print(f"✨ Arabic backfill complete: {len(updates)} rows updated")
+
+def delete_rows_by_source(source_file):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tweets WHERE source_file = ?", (source_file,))
+    conn.commit()
+    conn.close()
 
 # ==============================
-# Init Sequence
+# Init
 # ==============================
 init_db()
 migrate_csv_to_sqlite()
+backfill_missing_arabic_translations()
 
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()
-
-backfill_arabic()
-st.session_state.df = load_tweets()
 
 # ==============================
 # Model
 # ==============================
 MODEL_PATH = "Mila1612/mdeberta-cyberbullying"
-
 @st.cache_resource
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
     return tokenizer, model
-
 tokenizer, model = load_model()
 
 # ==============================
-# Cleaning & Prediction
+# Cleaning
 # ==============================
 def clean_for_model(text):
     text = str(text).lower()
@@ -213,6 +216,15 @@ def predict(text, threshold=0.35):
 # ==============================
 # Helpers
 # ==============================
+def language_filter_ui(df, key):
+    langs_available = sorted([l for l in LANG_MAP.values() if l != "unknown"])
+    options = ["All"] + langs_available
+    choice = st.selectbox("Filter by language", options=options, key=key)
+    if choice == "All":
+        return df
+    else:
+        return df[df["language_display"] == choice]
+
 def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
     if columns:
         df = df[columns]
@@ -231,87 +243,147 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20):
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
 st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
 
-tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂"])
+tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Tools 🛠️"])
 
 # ==============================
 # All Tab
 # ==============================
 with tabs[0]:
-    df = st.session_state.df
+    st.subheader("📊 Overall Insights")
+    df = language_filter_ui(st.session_state.df, key="all_filter")
     col1, col2 = st.columns([1, 1.2])
     with col1:
-        st.subheader("📊 Sentiment Distribution")
         sentiment_counts = df["sentiment"].value_counts().reset_index()
         sentiment_counts.columns = ["sentiment", "count"]
         fig_pie = px.pie(sentiment_counts, values="count", names="sentiment", color="sentiment",
                          height=500, color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-        st.plotly_chart(fig_pie, width="stretch")
+        st.plotly_chart(fig_pie, use_container_width=True)
     with col2:
-        st.subheader("🌍 Language Distribution by Sentiment")
-        lang_dist = df.groupby(["language", "sentiment"]).size().reset_index(name="count")
-        fig_bar = px.bar(lang_dist, x="language", y="count", color="sentiment", barmode="group",
+        lang_dist = df.groupby(["language_display", "sentiment"]).size().reset_index(name="count")
+        fig_bar = px.bar(lang_dist, x="language_display", y="count", color="sentiment", barmode="group",
                          text="count", height=500,
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
-        st.plotly_chart(fig_bar, width="stretch")
-
+        st.plotly_chart(fig_bar, use_container_width=True)
     st.subheader("📝 All Tweets")
-    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    render_paginated_table(df, key_prefix="all", columns=["id", "source_file", "language_display", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Cyberbullying Tab
 # ==============================
 with tabs[1]:
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
-    st.subheader("📌 Cyberbullying Insights")
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Total CB Tweets", len(df_cb))
-    if not df_cb.empty:
-        kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
-    kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
-
-    if not df_cb.empty:
-        cb_lang_dist = df_cb["language"].value_counts().reset_index()
-        cb_lang_dist.columns = ["language", "count"]
-        fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
-                             text="count", height=500, color_discrete_map=LANG_COLORS)
-        st.plotly_chart(fig_cb_lang, width="stretch")
-
-    st.subheader("📋 Cyberbullying Tweets")
-    render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    df_cb = language_filter_ui(df_cb, key="cb_filter")
+    st.subheader("📌 Cyberbullying Tweets")
+    render_paginated_table(df_cb, key_prefix="cb", columns=["id", "source_file", "language_display", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Non-Cyberbullying Tab
 # ==============================
 with tabs[2]:
     df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
-    st.subheader("📌 Non-Cyberbullying Insights")
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Total NCB Tweets", len(df_ncb))
-    if not df_ncb.empty:
-        kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
-    kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
-
-    if not df_ncb.empty:
-        ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
-        ncb_lang_dist.columns = ["language", "count"]
-        fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
-                              text="count", height=500, color_discrete_map=LANG_COLORS)
-        st.plotly_chart(fig_ncb_lang, width="stretch")
-
-    st.subheader("📋 Non-Cyberbullying Tweets")
-    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    df_ncb = language_filter_ui(df_ncb, key="ncb_filter")
+    st.subheader("📌 Non-Cyberbullying Tweets")
+    render_paginated_table(df_ncb, key_prefix="ncb", columns=["id", "source_file", "language_display", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
-# Sidebar - Single Tweet Analysis
+# Tools Tab
+# ==============================
+with tabs[3]:
+    st.subheader("🛠️ Tools")
+    tool_choice = st.radio("Choose Tool:", ["Download Data", "Upload Data", "Delete Data"])
+    df_all = st.session_state.df.copy()
+
+    # --- Download ---
+    if tool_choice == "Download Data":
+        sentiments = ["All"] + sorted(df_all["sentiment"].unique())
+        sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0)
+        langs_available = sorted([l for l in LANG_MAP.values() if l != "unknown"])
+        lang_options = ["All"] + langs_available
+        lang_choice = st.selectbox("Filter by Language", options=lang_options, index=0)
+        df_filtered = df_all.copy()
+        if sentiment_choice != "All":
+            df_filtered = df_filtered[df_filtered["sentiment"] == sentiment_choice]
+        if lang_choice != "All":
+            df_filtered = df_filtered[df_filtered["language_display"] == lang_choice]
+        if "timestamp" in df_filtered.columns:
+            df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
+            if not df_filtered["timestamp"].isna().all():
+                min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
+                date_range = st.date_input("Select Date Range",
+                                           value=(min_date.date(), max_date.date()),
+                                           min_value=min_date.date(), max_value=max_date.date())
+                df_filtered = df_filtered[
+                    (df_filtered["timestamp"].dt.date >= date_range[0]) &
+                    (df_filtered["timestamp"].dt.date <= date_range[1])
+                ]
+        base_cols = ["id", "source_file", "language_display", "sentiment", "text", "translated_tweet", "timestamp"]
+        if not df_filtered.empty:
+            st.write("📊 Preview", df_filtered.head(10)[base_cols])
+            csv_buffer = io.StringIO()
+            df_filtered[base_cols].to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+            st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(),
+                               file_name="tweets_filtered.csv", mime="text/csv")
+
+    # --- Upload ---
+    elif tool_choice == "Upload Data":
+        st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
+        uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith(".csv"):
+                new_df = pd.read_csv(uploaded_file)
+            else:
+                new_df = pd.read_excel(uploaded_file)
+            if "text" not in new_df.columns:
+                st.error("❌ File must contain 'text' column")
+            else:
+                results = []
+                for _, row in new_df.iterrows():
+                    raw_text = str(row["text"]).strip()
+                    if not raw_text:
+                        continue
+                    model_cleaned = clean_for_model(raw_text)
+                    eda_cleaned = clean_for_eda(raw_text)
+                    label, _ = predict(model_cleaned)
+                    sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+                    try:
+                        detected_code = detect(raw_text)
+                        lang = detected_code if detected_code in LANG_MAP else "unknown"
+                    except:
+                        lang = "unknown"
+                    try:
+                        translated = GoogleTranslator(source="ar" if lang=="arabic" else "auto", target="en").translate(raw_text)
+                    except:
+                        translated = "[translation error]"
+                    new_row = insert_tweet(raw_text, lang, label, sentiment,
+                                           model_cleaned, eda_cleaned, translated,
+                                           source_file=f"upload:{uploaded_file.name}")
+                    results.append(new_row)
+                if results:
+                    st.session_state.df = pd.concat([pd.concat(results), st.session_state.df], ignore_index=True)
+                    st.success("✅ Uploaded data analyzed and saved!")
+
+    # --- Delete ---
+    elif tool_choice == "Delete Data":
+        st.write("🗑 Delete tweets from DB")
+        st.dataframe(df_all[["id", "source_file", "language_display", "sentiment", "text", "translated_tweet"]].head(20))
+        ids_to_delete = st.multiselect("Select rows by ID to delete", df_all["id"].tolist())
+        if st.button("Delete Selected Rows") and ids_to_delete:
+            delete_rows_by_ids(ids_to_delete)
+            st.session_state.df = load_tweets()
+            st.success(f"✅ Deleted {len(ids_to_delete)} rows.")
+        sources = df_all["source_file"].dropna().unique().tolist()
+        if sources:
+            source_choice = st.selectbox("Delete by Source File", ["None"] + sources, key="del_source")
+            if source_choice != "None" and st.button("Delete All from Source"):
+                delete_rows_by_source(source_choice)
+                st.session_state.df = load_tweets()
+                st.success(f"✅ Deleted all rows from source: {source_choice}")
+
+# ==============================
+# Sidebar - Single Tweet
 # ==============================
 st.sidebar.image("twitter_icon.png", width="stretch")
 st.sidebar.header("🔍 X Cyberbullying Detection")
-st.sidebar.markdown("""
-**X CYBERBULLYING DETECTION**  
-Detects cyberbullying in tweets across multiple languages.  
-Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
-""")
-
 tweet_input = st.sidebar.text_area("✍️ Enter a tweet for analysis:")
 
 if st.sidebar.button("Analyze Tweet"):
@@ -322,20 +394,19 @@ if st.sidebar.button("Analyze Tweet"):
         sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
         try:
             detected_code = detect(tweet_input)
-            lang = LANG_MAP.get(detected_code, detected_code)
+            lang = detected_code if detected_code in LANG_MAP else "unknown"
         except:
             lang = "unknown"
         try:
-            translated = GoogleTranslator(source="ar" if lang == "arabic" else "auto", target="en").translate(tweet_input)
+            translated = GoogleTranslator(source="ar" if lang=="arabic" else "auto", target="en").translate(tweet_input)
         except Exception:
             translated = "[translation error]"
-
         new_row = insert_tweet(tweet_input, lang, label, sentiment,
                                model_cleaned, eda_cleaned, translated, source_file="manual")
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
         st.session_state.analysis_result = {
             "sentiment": sentiment,
-            "lang": lang,
+            "lang": LANG_MAP.get(lang, lang),
             "translated": translated
         }
         st.rerun()
