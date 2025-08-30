@@ -155,6 +155,18 @@ def clean_for_eda(text):
     return text
 
 # ==============================
+# Translation Fix
+# ==============================
+def safe_translate(text, detected_lang="auto", target="en"):
+    try:
+        clean_text = re.sub(r"http\S+|www\S+", "", str(text)).strip()
+        if detected_lang == "ar" or "arabic" in detected_lang.lower():
+            return GoogleTranslator(source="ar", target=target).translate(clean_text)
+        return GoogleTranslator(source="auto", target=target).translate(clean_text)
+    except Exception:
+        return "[translation error]"
+
+# ==============================
 # Prediction
 # ==============================
 def predict(text, threshold=0.35):
@@ -271,7 +283,7 @@ with tabs[2]:
     st.subheader("📌 Non-Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Total NCB Tweets", len(df_ncb))
-    kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
+    kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
     if not df_ncb.empty:
@@ -325,10 +337,8 @@ if st.sidebar.button("Analyze Tweet"):
             lang = LANG_MAP.get(detected_code, detected_code)
         except:
             lang = "unknown"
-        try:
-            translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
-        except Exception:
-            translated = "[translation error]"
+
+        translated = safe_translate(tweet_input, detected_code)
 
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
