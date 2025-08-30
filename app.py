@@ -286,40 +286,51 @@ with tabs[3]:
     df_all = st.session_state.df.copy()
     st.subheader("📥 Download Filtered Tweets")
 
-    sentiments = st.multiselect("Filter by Sentiment", 
-                                options=df_all["sentiment"].unique(), 
-                                default=df_all["sentiment"].unique())
+    # ✅ Sentiment filter with "All"
+    sentiments = ["All"] + sorted(df_all["sentiment"].unique())
+    sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0)
 
-    langs = st.multiselect("Filter by Language", 
-                           options=sorted([l for l in LANG_MAP.values() if l != "unknown"]), 
-                           default=sorted([l for l in LANG_MAP.values() if l != "unknown"]))
+    # ✅ Language filter with "All"
+    langs_available = sorted([l for l in LANG_MAP.values() if l != "unknown"])
+    lang_options = ["All"] + langs_available
+    lang_choice = st.selectbox("Filter by Language", options=lang_options, index=0)
 
-    df_all["timestamp"] = pd.to_datetime(df_all["timestamp"], errors="coerce")
-    min_date, max_date = df_all["timestamp"].min(), df_all["timestamp"].max()
+    # ✅ Apply filters
+    df_filtered = df_all.copy()
+    if sentiment_choice != "All":
+        df_filtered = df_filtered[df_filtered["sentiment"] == sentiment_choice]
+    if lang_choice != "All":
+        df_filtered = df_filtered[df_filtered["language"] == lang_choice]
 
-    date_range = st.date_input("Select Date Range", 
-                               value=(min_date.date(), max_date.date()),
-                               min_value=min_date.date(),
-                               max_value=max_date.date())
+    # ✅ Date filter
+    df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
+    if not df_filtered.empty:
+        min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
+        date_range = st.date_input("Select Date Range", 
+                                   value=(min_date.date(), max_date.date()),
+                                   min_value=min_date.date(),
+                                   max_value=max_date.date())
+        df_filtered = df_filtered[
+            (df_filtered["timestamp"].dt.date >= date_range[0]) &
+            (df_filtered["timestamp"].dt.date <= date_range[1])
+        ]
 
-    mask = (df_all["sentiment"].isin(sentiments)) & \
-           (df_all["language"].isin(langs)) & \
-           (df_all["timestamp"].dt.date >= date_range[0]) & \
-           (df_all["timestamp"].dt.date <= date_range[1])
-    df_filtered = df_all.loc[mask]
-
+    # ✅ Column filter
     all_cols = ["language", "sentiment", "text", "model_clean", "eda_clean", "translated_tweet", "timestamp"]
     selected_cols = st.multiselect("Select Columns to Download", options=all_cols, default=all_cols)
 
+    # ✅ Download buttons
     if not df_filtered.empty and selected_cols:
         df_out = df_filtered[selected_cols]
         st.write("📊 Preview", df_out.head(10))
 
+        # CSV with utf-8-sig so Excel shows Arabic correctly
         csv_buffer = io.StringIO()
-        df_out.to_csv(csv_buffer, index=False)
+        df_out.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
         st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(), 
                            file_name="tweets_filtered.csv", mime="text/csv")
 
+        # Excel (already handles UTF-8 well)
         xlsx_buffer = io.BytesIO()
         with pd.ExcelWriter(xlsx_buffer, engine="openpyxl") as writer:
             df_out.to_excel(writer, index=False, sheet_name="Tweets")
@@ -327,6 +338,7 @@ with tabs[3]:
                            file_name="tweets_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.info("⚠️ No data matches your filter or no columns selected.")
+
 
 # ==============================
 # Sidebar - Single Tweet Analysis
