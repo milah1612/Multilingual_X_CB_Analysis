@@ -65,11 +65,14 @@ def migrate_csv_to_postgres():
     if os.path.exists("tweet_data.csv"):
         df = pd.read_csv("tweet_data.csv")
 
+        # Ensure required schema
         required_cols = [
             "text", "language", "binary_label", "sentiment",
             "model_clean", "eda_clean", "translated_tweet",
             "source_file", "timestamp"
         ]
+
+        # Add missing columns if not present
         for col in required_cols:
             if col not in df.columns:
                 if col == "binary_label":
@@ -81,26 +84,38 @@ def migrate_csv_to_postgres():
                 else:
                     df[col] = ""
 
-        df = df[required_cols]
+        # Reorder and fill NaN
+        df = df[required_cols].fillna("")
 
         with engine.begin() as conn:
             count = conn.execute(text("SELECT COUNT(*) FROM tweets")).scalar()
             if count == 0:
-                df.to_sql("tweets", engine, if_exists="append", index=False, method="multi")
+                df.to_sql("tweets", engine, if_exists="replace", index=False, method="multi")
                 print("✅ Migrated CSV into Postgres (first time only)")
             else:
                 print("➡️ DB already has data, skipping migration")
+
 
 def load_tweets():
     with engine.connect() as conn:
         return pd.read_sql("SELECT * FROM tweets ORDER BY timestamp DESC", conn)
 
-def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source_file="manual"):
+
+def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean,
+                 translated_tweet, source_file="manual"):
     timestamp = datetime.now().isoformat()
     with engine.begin() as conn:
         conn.execute(text("""
-            INSERT INTO tweets (text, language, binary_label, sentiment, model_clean, eda_clean, translated_tweet, source_file, timestamp)
-            VALUES (:text, :language, :binary_label, :sentiment, :model_clean, :eda_clean, :translated_tweet, :source_file, :timestamp)
+            INSERT INTO tweets (
+                text, language, binary_label, sentiment,
+                model_clean, eda_clean, translated_tweet,
+                source_file, timestamp
+            )
+            VALUES (
+                :text, :language, :binary_label, :sentiment,
+                :model_clean, :eda_clean, :translated_tweet,
+                :source_file, :timestamp
+            )
         """), {
             "text": text, "language": language, "binary_label": binary_label,
             "sentiment": sentiment, "model_clean": model_clean, "eda_clean": eda_clean,
@@ -108,12 +123,14 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
             "timestamp": timestamp
         })
 
+    # Return as DataFrame for UI concat
     return pd.DataFrame([{
         "text": text, "language": language, "binary_label": binary_label,
         "sentiment": sentiment, "model_clean": model_clean, "eda_clean": eda_clean,
         "translated_tweet": translated_tweet, "source_file": source_file,
         "timestamp": timestamp
     }])
+
 
 # ==============================
 # Init DB + Session
