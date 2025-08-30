@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import re, html, emoji
+import re, html
 import sqlite3, os
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -9,7 +9,6 @@ import plotly.express as px
 from collections import Counter
 from deep_translator import GoogleTranslator
 from langdetect import detect
-import io
 
 # ==============================
 # Language Mapping
@@ -64,6 +63,7 @@ def init_db():
     conn.close()
 
 def migrate_csv_to_sqlite():
+    """Seed DB from CSV only if DB is empty"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM tweets")
@@ -74,6 +74,8 @@ def migrate_csv_to_sqlite():
         df = pd.read_csv(CSV_FILE)
         if "translated_tweet" not in df.columns:
             df["translated_tweet"] = "[not translated]"
+        if "timestamp" not in df.columns:
+            df["timestamp"] = datetime.now().isoformat()
         conn = sqlite3.connect(DB_FILE)
         df.to_sql("tweets", conn, if_exists="append", index=False)
         conn.close()
@@ -232,16 +234,14 @@ with tabs[1]:
     kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
-    # ✅ Distribution by language
-    st.subheader("🌍 CB Distribution by Language")
     if not df_cb.empty:
+        st.subheader("🌍 CB Distribution by Language")
         cb_lang_dist = df_cb["language"].value_counts().reset_index()
         cb_lang_dist.columns = ["language", "count"]
         fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
                              text="count", height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_cb_lang, use_container_width=True)
 
-    # ✅ Hashtag analysis
     hashtags = [h for tags in df_cb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
     if top_hashtags:
@@ -274,16 +274,14 @@ with tabs[2]:
     kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
-    # ✅ Distribution by language
-    st.subheader("🌍 NCB Distribution by Language")
     if not df_ncb.empty:
+        st.subheader("🌍 NCB Distribution by Language")
         ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
         ncb_lang_dist.columns = ["language", "count"]
         fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
                               text="count", height=500, color_discrete_map=LANG_COLORS)
         st.plotly_chart(fig_ncb_lang, use_container_width=True)
 
-    # ✅ Hashtag analysis
     hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
     top_hashtags = Counter(hashtags).most_common(15)
     if top_hashtags:
@@ -303,9 +301,8 @@ with tabs[2]:
     render_paginated_table(df_ncb, key_prefix="ncb",
                            columns=["language", "sentiment", "model_clean", "translated_tweet"])   
 
-
 # ==============================
-# Sidebar
+# Sidebar - Single Tweet Analysis
 # ==============================
 st.sidebar.image("twitter_icon.png", use_container_width=True)
 st.sidebar.header("🔍 X Cyberbullying Detection")
@@ -333,84 +330,20 @@ if st.sidebar.button("Analyze Tweet"):
         except Exception:
             translated = "[translation error]"
 
-        # ✅ Insert new row
         new_row = insert_tweet(tweet_input, lang, label, sentiment, model_cleaned, eda_cleaned, translated)
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
 
-        # ✅ Store results in session state so they persist after rerun
         st.session_state.analysis_result = {
             "sentiment": sentiment,
             "lang": lang,
             "translated": translated
         }
-
-        # ✅ Rerun so charts + tables refresh
         st.rerun()
-
     else:
         st.sidebar.warning("Please enter some text.")
 
-# ==============================
-# Show analysis result if available
-# ==============================
 if "analysis_result" in st.session_state:
     result = st.session_state.analysis_result
     st.sidebar.success(f"✅ Prediction: {result['sentiment']}")
     st.sidebar.write(f"🌍 Language: {result['lang']}")
     st.sidebar.write(f"🌐 Translated: {result['translated']}")
-
-
-# ---- Bulk Upload Analysis ----
-st.sidebar.subheader("📤 Upload Tweets for Auto Analysis")
-uploaded_file = st.sidebar.file_uploader("Upload CSV/XLSX", type=["csv", "xlsx"])
-
-if uploaded_file is not None:
-    if uploaded_file.name.endswith(".csv"):
-        new_df = pd.read_csv(uploaded_file)
-    else:
-        new_df = pd.read_excel(uploaded_file)
-
-    if "text" not in new_df.columns:
-        st.sidebar.error("❌ File must have a 'text' column containing tweets.")
-    else:
-        results = []
-        for _, row in new_df.iterrows():
-            raw_text = str(row["text"])
-            model_cleaned = clean_for_model(raw_text)
-            eda_cleaned = clean_for_eda(raw_text)
-            label, cb_prob = predict(model_cleaned)
-            sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
-
-            try:
-                detected_code = detect(raw_text)
-                lang = LANG_MAP.get(detected_code, detected_code)
-            except:
-                lang = "unknown"
-
-            try:
-                translated = GoogleTranslator(source="auto", target="en").translate(raw_text)
-            except Exception:
-                translated = "[translation error]"
-
-            new_row = insert_tweet(raw_text, lang, label, sentiment,
-                                   model_cleaned, eda_cleaned, translated)
-            results.append(new_row)
-
-        if results:
-            # ✅ Merge uploaded results into dashboard data
-            st.session_state.df = pd.concat([pd.concat(results), st.session_state.df],
-                                            ignore_index=True)
-
-            # ✅ Store a flag to show success once
-            st.session_state.upload_success = True
-            st.rerun()
-
-# ✅ Show upload success message (persists after rerun)
-if "upload_success" in st.session_state and st.session_state.upload_success:
-    st.sidebar.success("✅ Uploaded tweets analyzed and added to dashboard!")
-    st.session_state.upload_success = False
-
-
-
-
-
