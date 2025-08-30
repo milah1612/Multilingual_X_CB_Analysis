@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-import re, html
-import sqlite3, os
+import re, html, sqlite3, os
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -81,23 +80,32 @@ def migrate_csv_to_sqlite():
         conn.close()
         print("✅ Migrated CSV into SQLite (first time only)")
 
+# ------------------------------
+# Arabic Backfill Logic
+# ------------------------------
+def is_arabic(text):
+    """Check if a string contains Arabic characters."""
+    return bool(re.search(r'[\u0600-\u06FF]', str(text)))
+
 def backfill_missing_arabic_translations():
-    """Translate only Arabic rows that are missing translated_tweet"""
+    """Translate only Arabic rows missing or still Arabic in translated_tweet"""
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT id, text, language, translated_tweet FROM tweets", conn)
 
     updates = []
     for _, row in df.iterrows():
-        if row["language"] == "arabic" and (
-            pd.isna(row["translated_tweet"]) or 
-            str(row["translated_tweet"]).strip() in ["", "[not translated]"]
-        ):
-            try:
-                translated = GoogleTranslator(source="ar", target="en").translate(str(row["text"]))
-                updates.append((translated, row["id"]))
-                print(f"✅ Translated row {row['id']}: {translated[:50]}...")
-            except Exception as e:
-                print(f"⚠️ Failed row {row['id']}: {e}")
+        if row["language"] == "arabic":
+            if (
+                pd.isna(row["translated_tweet"]) 
+                or str(row["translated_tweet"]).strip() in ["", "[not translated]"]
+                or is_arabic(row["translated_tweet"])
+            ):
+                try:
+                    translated = GoogleTranslator(source="ar", target="en").translate(str(row["text"]))
+                    updates.append((translated, row["id"]))
+                    print(f"✅ Fixed Arabic row {row['id']}: {translated[:50]}...")
+                except Exception as e:
+                    print(f"⚠️ Failed row {row['id']}: {e}")
 
     if updates:
         cursor = conn.cursor()
@@ -139,7 +147,7 @@ def insert_tweet(text, language, binary_label, sentiment, model_clean, eda_clean
 # ==============================
 init_db()
 migrate_csv_to_sqlite()
-backfill_missing_arabic_translations()   # 🔥 Fix missing Arabic translations
+backfill_missing_arabic_translations()
 
 if "df" not in st.session_state:
     st.session_state.df = load_tweets()
@@ -257,7 +265,7 @@ with tabs[1]:
     st.subheader("📌 Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Total CB Tweets", len(df_cb))
-    kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].fillna('').astype(str).str.len().mean():.1f}")
+    kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
 
     if not df_cb.empty:
@@ -297,7 +305,7 @@ with tabs[2]:
     st.subheader("📌 Non-Cyberbullying Insights")
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Total NCB Tweets", len(df_ncb))
-    kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].fillna('').astype(str).str.len().mean():.1f}")
+    kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
 
     if not df_ncb.empty:
@@ -352,10 +360,7 @@ if st.sidebar.button("Analyze Tweet"):
         except:
             lang = "unknown"
         try:
-            if lang == "arabic":
-                translated = GoogleTranslator(source="ar", target="en").translate(tweet_input)
-            else:
-                translated = GoogleTranslator(source="auto", target="en").translate(tweet_input)
+            translated = GoogleTranslator(source="ar" if lang=="arabic" else "auto", target="en").translate(tweet_input)
         except Exception:
             translated = "[translation error]"
 
