@@ -302,7 +302,33 @@ with tabs[1]:
         cb_lang_dist.columns = ["language", "count"]
         fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
                              text="count", height=500, color_discrete_map=LANG_COLORS)
-        st.plotly_chart(fig_cb_lang, use_container_width=True)
+        st.plotly_chart(fig_cb_lang, use_container_width=True) 
+
+
+    # --- Hashtag Analysis ---
+df_cb["hashtags"] = df_cb["text"].apply(lambda x: re.findall(r"#\w+", str(x)))
+hashtags = [h for tags in df_cb["hashtags"] for h in tags]
+top_hashtags = Counter(hashtags).most_common(15)
+
+if top_hashtags:
+    st.subheader("#️⃣ Distinctive Hashtags")
+    hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
+    
+    # Bubble chart
+    fig_bubble = px.scatter(
+        hashtags_df, x="hashtag", y="count", size="count", color="hashtag",
+        hover_name="hashtag", size_max=60, height=500
+    )
+    st.plotly_chart(fig_bubble, use_container_width=True)
+
+    # Treemap
+    st.subheader("🧩 Hashtag Clustering")
+    fig_cluster = px.treemap(
+        hashtags_df, path=["hashtag"], values="count", color="count",
+        color_continuous_scale="Viridis", height=500
+    )
+    st.plotly_chart(fig_cluster, use_container_width=True)
+
     st.subheader("📋 Cyberbullying Tweets")
     render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
