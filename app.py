@@ -4,7 +4,8 @@ import re, html, io, sqlite3, os
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
-import plotly.express as px
+import plotly.express as px 
+from collections import Counter 
 from deep_translator import GoogleTranslator
 from langdetect import detect_langs
 
