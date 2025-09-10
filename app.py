@@ -163,20 +163,18 @@ def backfill_missing_arabic_translations():
 # ==============================
 # Language Detection
 # ==============================
-def detect_language(text, prob_threshold=0.30):
+from langdetect import detect_langs
+
+def detect_language(text):
     try:
         langs = detect_langs(text)
-        if len(langs) > 1 and langs[1].prob > prob_threshold:
-            primary = LANG_MAP.get(langs[0].lang, langs[0].lang)
-            secondary = LANG_MAP.get(langs[1].lang, langs[1].lang)
-            if primary == "english" and secondary != "unknown":
-                return secondary
-            elif secondary == "english" and primary != "unknown":
-                return primary
-            else:
-                return primary
-        else:
-            return LANG_MAP.get(langs[0].lang, langs[0].lang)
+        # langs looks like: [hi:0.55, en:0.45]
+        top = max(langs, key=lambda x: x.prob)
+        # If Hindi/Arabic/etc appears with decent probability, override English
+        for lang in langs:
+            if lang.lang in ["hi", "ar", "es", "fr", "de", "it", "pt"] and lang.prob > 0.25:
+                return lang.lang
+        return top.lang
     except:
         return "unknown"
 
@@ -455,8 +453,12 @@ if st.sidebar.button("Analyze Tweet"):
         eda_cleaned = clean_for_eda(tweet_input)
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
-        lang = detect_language(tweet_input)
-        translated = safe_translate(tweet_input, lang, context="sidebar")
+
+        # ✅ new language detection
+        lang_code = detect_language(tweet_input)
+        lang = LANG_MAP.get(lang_code, lang_code)
+        translated = safe_translate(tweet_input, lang_code, context="sidebar")
+
         new_row = insert_tweet(tweet_input, lang, label, sentiment,
                                model_cleaned, eda_cleaned, translated, source_file="manual")
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
@@ -474,3 +476,4 @@ if "analysis_result" in st.session_state:
     st.sidebar.success(f"✅ Prediction: {result['sentiment']}")
     st.sidebar.write(f"🌍 Language: {result['lang']}")
     st.sidebar.write(f"🌐 Translated: {result['translated']}")
+
