@@ -292,45 +292,49 @@ with tabs[1]:
     st.subheader("📌 Cyberbullying Insights")
     df_cb = st.session_state.df[st.session_state.df["sentiment"] == "Cyberbullying"].copy()
     df_cb = language_filter_ui(df_cb, key="cb_filter")
+
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Total CB Tweets", len(df_cb))
     if not df_cb.empty:
         kpi2.metric("Avg. Tweet Length", f"{df_cb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_cb) / len(st.session_state.df)) * 100:.1f}%")
+
     if not df_cb.empty:
         cb_lang_dist = df_cb["language"].value_counts().reset_index()
         cb_lang_dist.columns = ["language", "count"]
-        fig_cb_lang = px.bar(cb_lang_dist, x="language", y="count", color="language",
-                             text="count", height=500, color_discrete_map=LANG_COLORS)
-        st.plotly_chart(fig_cb_lang, use_container_width=True) 
+        fig_cb_lang = px.bar(
+            cb_lang_dist, x="language", y="count", color="language",
+            text="count", height=500, color_discrete_map=LANG_COLORS
+        )
+        st.plotly_chart(fig_cb_lang, use_container_width=True)
 
+        # --- Hashtag Analysis ---
+        df_cb["hashtags"] = df_cb["text"].apply(lambda x: re.findall(r"#\w+", str(x)))
+        hashtags = [h for tags in df_cb["hashtags"] for h in tags]
+        top_hashtags = Counter(hashtags).most_common(15)
 
-    # --- Hashtag Analysis ---
-df_cb["hashtags"] = df_cb["text"].apply(lambda x: re.findall(r"#\w+", str(x)))
-hashtags = [h for tags in df_cb["hashtags"] for h in tags]
-top_hashtags = Counter(hashtags).most_common(15)
+        if top_hashtags:
+            st.subheader("#️⃣ Distinctive Hashtags")
+            hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
 
-if top_hashtags:
-    st.subheader("#️⃣ Distinctive Hashtags")
-    hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
-    
-    # Bubble chart
-    fig_bubble = px.scatter(
-        hashtags_df, x="hashtag", y="count", size="count", color="hashtag",
-        hover_name="hashtag", size_max=60, height=500
-    )
-    st.plotly_chart(fig_bubble, use_container_width=True)
+            # Bubble chart
+            fig_bubble = px.scatter(
+                hashtags_df, x="hashtag", y="count", size="count", color="hashtag",
+                hover_name="hashtag", size_max=60, height=500
+            )
+            st.plotly_chart(fig_bubble, use_container_width=True)
 
-    # Treemap
-    st.subheader("🧩 Hashtag Clustering")
-    fig_cluster = px.treemap(
-        hashtags_df, path=["hashtag"], values="count", color="count",
-        color_continuous_scale="Viridis", height=500
-    )
-    st.plotly_chart(fig_cluster, use_container_width=True)
+            # Treemap
+            st.subheader("🧩 Hashtag Clustering")
+            fig_cluster = px.treemap(
+                hashtags_df, path=["hashtag"], values="count", color="count",
+                color_continuous_scale="Viridis", height=500
+            )
+            st.plotly_chart(fig_cluster, use_container_width=True)
 
     st.subheader("📋 Cyberbullying Tweets")
-    render_paginated_table(df_cb, key_prefix="cb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    render_paginated_table(df_cb, key_prefix="cb",
+                           columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Non-Cyberbullying Tab
@@ -339,19 +343,49 @@ with tabs[2]:
     st.subheader("📌 Non-Cyberbullying Insights")
     df_ncb = st.session_state.df[st.session_state.df["sentiment"] == "Non Cyberbullying"].copy()
     df_ncb = language_filter_ui(df_ncb, key="ncb_filter")
+
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Total NCB Tweets", len(df_ncb))
     if not df_ncb.empty:
         kpi2.metric("Avg. Tweet Length", f"{df_ncb['eda_clean'].str.len().mean():.1f}")
     kpi3.metric("% of Dataset", f"{(len(df_ncb) / len(st.session_state.df)) * 100:.1f}%")
+
     if not df_ncb.empty:
         ncb_lang_dist = df_ncb["language"].value_counts().reset_index()
         ncb_lang_dist.columns = ["language", "count"]
-        fig_ncb_lang = px.bar(ncb_lang_dist, x="language", y="count", color="language",
-                              text="count", height=500, color_discrete_map=LANG_COLORS)
+        fig_ncb_lang = px.bar(
+            ncb_lang_dist, x="language", y="count", color="language",
+            text="count", height=500, color_discrete_map=LANG_COLORS
+        )
         st.plotly_chart(fig_ncb_lang, use_container_width=True)
+
+        # --- Hashtag Analysis ---
+        df_ncb["hashtags"] = df_ncb["text"].apply(lambda x: re.findall(r"#\w+", str(x)))
+        hashtags = [h for tags in df_ncb["hashtags"] for h in tags]
+        top_hashtags = Counter(hashtags).most_common(15)
+
+        if top_hashtags:
+            st.subheader("#️⃣ Distinctive Hashtags")
+            hashtags_df = pd.DataFrame(top_hashtags, columns=["hashtag", "count"])
+
+            # Bubble chart
+            fig_bubble = px.scatter(
+                hashtags_df, x="hashtag", y="count", size="count", color="hashtag",
+                hover_name="hashtag", size_max=60, height=500
+            )
+            st.plotly_chart(fig_bubble, use_container_width=True)
+
+            # Treemap
+            st.subheader("🧩 Hashtag Clustering")
+            fig_cluster = px.treemap(
+                hashtags_df, path=["hashtag"], values="count", color="count",
+                color_continuous_scale="Viridis", height=500
+            )
+            st.plotly_chart(fig_cluster, use_container_width=True)
+
     st.subheader("📋 Non-Cyberbullying Tweets")
-    render_paginated_table(df_ncb, key_prefix="ncb", columns=["language", "sentiment", "model_clean", "translated_tweet"])
+    render_paginated_table(df_ncb, key_prefix="ncb",
+                           columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Tools Tab
