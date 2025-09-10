@@ -5,9 +5,8 @@ from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import plotly.express as px
-from collections import Counter
 from deep_translator import GoogleTranslator
-from langdetect import detect
+from langdetect import detect_langs
 
 # ==============================
 # Language Mapping
@@ -130,7 +129,6 @@ def delete_rows_by_source(source_file):
 # Translation Helpers
 # ==============================
 def is_arabic(text):
-    """Check if text contains Arabic characters"""
     return bool(re.search(r'[\u0600-\u06FF]', str(text)))
 
 def safe_translate(text, lang_code, row_id=None, context="general"):
@@ -139,14 +137,11 @@ def safe_translate(text, lang_code, row_id=None, context="general"):
             translated = GoogleTranslator(source="ar", target="en").translate(text)
         else:
             translated = GoogleTranslator(source="auto", target="en").translate(text)
-        print(f"✅ [{context}] Row {row_id if row_id else '-'} | {lang_code} → {translated[:60]}")
         return translated
-    except Exception as e:
-        print(f"⚠️ [{context}] Row {row_id if row_id else '-'} | {lang_code} | Error: {e}")
+    except:
         return "[translation error]"
 
 def backfill_missing_arabic_translations():
-    """Strictly check and backfill Arabic translations only"""
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql("SELECT id, text, language, translated_tweet FROM tweets", conn)
     updates = []
@@ -164,7 +159,26 @@ def backfill_missing_arabic_translations():
         cursor.executemany("UPDATE tweets SET translated_tweet=? WHERE id=?", updates)
         conn.commit()
     conn.close()
-    print(f"✨ Arabic backfill complete: {len(updates)} rows updated")
+
+# ==============================
+# Language Detection
+# ==============================
+def detect_language(text, prob_threshold=0.30):
+    try:
+        langs = detect_langs(text)
+        if len(langs) > 1 and langs[1].prob > prob_threshold:
+            primary = LANG_MAP.get(langs[0].lang, langs[0].lang)
+            secondary = LANG_MAP.get(langs[1].lang, langs[1].lang)
+            if primary == "english" and secondary != "unknown":
+                return secondary
+            elif secondary == "english" and primary != "unknown":
+                return primary
+            else:
+                return primary
+        else:
+            return LANG_MAP.get(langs[0].lang, langs[0].lang)
+    except:
+        return "unknown"
 
 # ==============================
 # Init + Seed
@@ -384,12 +398,8 @@ with tabs[3]:
                     else:
                         label, _ = predict(model_cleaned)
                         sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
-                    try:
-                        detected_code = detect(raw_text)
-                        lang = LANG_MAP.get(detected_code, detected_code)
-                    except:
-                        lang = "unknown"
-                    translated = safe_translate(raw_text, detected_code, context="upload")
+                    lang = detect_language(raw_text)
+                    translated = safe_translate(raw_text, lang, context="upload")
                     new_row = insert_tweet(raw_text, lang, label, sentiment,
                                            model_cleaned, eda_cleaned, translated,
                                            source_file=f"upload:{uploaded_file.name}")
@@ -445,12 +455,8 @@ if st.sidebar.button("Analyze Tweet"):
         eda_cleaned = clean_for_eda(tweet_input)
         label, cb_prob = predict(model_cleaned)
         sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
-        try:
-            detected_code = detect(tweet_input)
-            lang = LANG_MAP.get(detected_code, detected_code)
-        except:
-            lang = "unknown"
-        translated = safe_translate(tweet_input, detected_code, context="sidebar")
+        lang = detect_language(tweet_input)
+        translated = safe_translate(tweet_input, lang, context="sidebar")
         new_row = insert_tweet(tweet_input, lang, label, sentiment,
                                model_cleaned, eda_cleaned, translated, source_file="manual")
         st.session_state.df = pd.concat([new_row, st.session_state.df], ignore_index=True)
