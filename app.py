@@ -500,8 +500,7 @@ with tabs[3]:
 # ==============================
 st.sidebar.image("twitter_icon.png", width="stretch")
 st.sidebar.header("🔍 X Cyberbullying Detection")
-st.sidebar.markdown("""
-**X CYBERBULLYING DETECTION**  
+st.sidebar.markdown("""  
 Detects cyberbullying in tweets across multiple languages.  
 Supports **English, Arabic, French, German, Hindi, Italian, Portuguese, and Spanish**.  
 """)
