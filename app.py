@@ -284,7 +284,7 @@ with tabs[0]:
                          color_discrete_map={"Cyberbullying": "#FF6F61", "Non Cyberbullying": "#4C9AFF"})
         st.plotly_chart(fig_bar, use_container_width=True)
     st.subheader("📝 All Tweets")
-    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "tweet", "translated_tweet"])
+    render_paginated_table(df, key_prefix="all", columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Cyberbullying Tab
@@ -335,7 +335,7 @@ with tabs[1]:
 
     st.subheader("📋 Cyberbullying Tweets")
     render_paginated_table(df_cb, key_prefix="cb",
-                           columns=["language", "sentiment", "tweet", "translated_tweet"])
+                           columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Non-Cyberbullying Tab
@@ -386,7 +386,7 @@ with tabs[2]:
 
     st.subheader("📋 Non-Cyberbullying Tweets")
     render_paginated_table(df_ncb, key_prefix="ncb",
-                           columns=["language", "sentiment", "tweet", "translated_tweet"])
+                           columns=["language", "sentiment", "model_clean", "translated_tweet"])
 
 # ==============================
 # Tools Tab
@@ -419,7 +419,7 @@ with tabs[3]:
                     (df_filtered["timestamp"].dt.date >= date_range[0]) &
                     (df_filtered["timestamp"].dt.date <= date_range[1])
                 ]
-        base_cols = ["language", "sentiment", "tweet", "translated_tweet"]
+        base_cols = ["language", "sentiment", "text", "translated_tweet"]
         include_timestamp = st.checkbox("Include Timestamp", value=True)
         selected_cols = base_cols + (["timestamp"] if include_timestamp else [])
         if not df_filtered.empty and selected_cols:
@@ -481,7 +481,7 @@ with tabs[3]:
         if lang_choice != "All":
             df_filtered = df_filtered[df_filtered["language"] == lang_choice]
         st.write("📊 Preview of Data (with ID + Source)")
-        st.dataframe(df_filtered[["id", "source_file", "language", "sentiment", "tweet", "translated_tweet"]].head(20))
+        st.dataframe(df_filtered[["id", "source_file", "language", "sentiment", "text", "translated_tweet"]].head(20))
         ids_to_delete = st.multiselect("Select rows by ID to delete", df_filtered["id"].tolist())
         if st.button("Delete Selected Rows") and ids_to_delete:
             delete_rows_by_ids(ids_to_delete)
