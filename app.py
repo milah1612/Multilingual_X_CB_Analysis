@@ -483,8 +483,6 @@ with tabs[3]:
                     st.write("📊 Preview of Uploaded Data")
                     st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
 
-                    # ✅ Auto-refresh main dashboard
-                    st.rerun()
 
     # --- Delete ---
     elif tool_choice == "Delete Data":
