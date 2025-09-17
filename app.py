@@ -475,14 +475,14 @@ with tabs[3]:
                     results.append(new_row)
 
                 if results:
-                    new_data = pd.concat(results, ignore_index=True)
-                    st.session_state.df = pd.concat([new_data, st.session_state.df], ignore_index=True)
+                    # ✅ Reload from DB so all tabs update
+                    st.session_state.df = load_tweets()
 
-                    # ✅ Show preview immediately
+                    # ✅ Show preview
                     st.success("✅ Uploaded data analyzed and saved!")
                     st.write("📊 Preview of Uploaded Data")
+                    new_data = pd.concat(results, ignore_index=True)
                     st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
-                    
 
     # --- Delete ---
     elif tool_choice == "Delete Data":
@@ -517,7 +517,6 @@ with tabs[3]:
                 st.session_state.df = load_tweets()
                 st.success(f"✅ Deleted all rows from source: {source_choice}")
                 st.rerun()   # ✅ refresh after source delete
-
 
 
 # ==============================
