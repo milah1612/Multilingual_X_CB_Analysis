@@ -240,12 +240,127 @@ st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Tools 🛠️"])
 
 # ==============================
-# Tools Tab (fixed upload)
+# Tools Tab
 # ==============================
 with tabs[3]:
     st.subheader("🛠️ Tools")
     tool_choice = st.radio("Choose Tool:", ["Download Data", "Upload Data", "Delete Data"])
     df_all = st.session_state.df.copy()
 
+    # --- Download ---
+    if tool_choice == "Download Data":
+        sentiments = ["All"] + sorted(df_all["sentiment"].unique())
+        sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0)
+        langs_available = sorted([l for l in df_all["language"].unique() if l != "unknown"])
+        lang_options = ["All"] + langs_available
+        lang_choice = st.selectbox("Filter by Language", options=lang_options, index=0)
+        df_filtered = df_all.copy()
+        if sentiment_choice != "All":
+            df_filtered = df_filtered[df_filtered["sentiment"] == sentiment_choice]
+        if lang_choice != "All":
+            df_filtered = df_filtered[df_filtered["language"] == lang_choice]
+        if "timestamp" in df_filtered.columns:
+            df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
+            if not df_filtered["timestamp"].isna().all():
+                min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
+                date_range = st.date_input("Select Date Range",
+                                           value=(min_date.date(), max_date.date()),
+                                           min_value=min_date.date(), max_value=max_date.date())
+                df_filtered = df_filtered[
+                    (df_filtered["timestamp"].dt.date >= date_range[0]) &
+                    (df_filtered["timestamp"].dt.date <= date_range[1])
+                ]
+        base_cols = ["language", "sentiment", "text", "translated_tweet"]
+        include_timestamp = st.checkbox("Include Timestamp", value=True)
+        selected_cols = base_cols + (["timestamp"] if include_timestamp else [])
+        if not df_filtered.empty and selected_cols:
+            df_out = df_filtered[selected_cols]
+            st.write("📊 Preview", df_out.head(10))
+            csv_buffer = io.StringIO()
+            df_out.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+            st.download_button("⬇️ Download CSV", data=csv_buffer.getvalue(),
+                               file_name="tweets_filtered.csv", mime="text/csv")
+        else:
+            st.info("⚠️ No data matches your filter.")
+
     # --- Upload ---
-    if tool_choice == "Upload Data"
+    elif tool_choice == "Upload Data":
+        st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
+        uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith(".csv"):
+                new_df = pd.read_csv(uploaded_file)
+            else:
+                new_df = pd.read_excel(uploaded_file)
+
+            if "text" not in new_df.columns:
+                st.error("❌ File must contain 'text' column")
+            else:
+                results = []
+                for _, row in new_df.iterrows():
+                    raw_text = str(row["text"]).strip()
+                    if not raw_text:
+                        continue
+                    model_cleaned = clean_for_model(raw_text)
+                    eda_cleaned = clean_for_eda(raw_text)
+
+                    # Predict sentiment
+                    if "binary_label" in new_df.columns and not pd.isna(row.get("binary_label", None)):
+                        label = int(row["binary_label"])
+                        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+                    else:
+                        label, _ = predict(model_cleaned)
+                        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+
+                    # Language detection + mapping
+                    lang_code = detect_language(raw_text)
+                    lang = LANG_MAP.get(lang_code, "unknown")
+
+                    # Translation
+                    translated = safe_translate(raw_text, lang_code, context="upload")
+
+                    # Insert into DB
+                    new_row = insert_tweet(raw_text, lang, label, sentiment,
+                                           model_cleaned, eda_cleaned, translated,
+                                           source_file=f"upload:{uploaded_file.name}")
+                    results.append(new_row)
+
+                if results:
+                    new_data = pd.concat(results, ignore_index=True)
+                    st.session_state.df = pd.concat([new_data, st.session_state.df], ignore_index=True)
+
+                    # ✅ Show preview immediately
+                    st.success("✅ Uploaded data analyzed and saved!")
+                    st.write("📊 Preview of Uploaded Data")
+                    st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
+
+                    # ✅ Auto-refresh main dashboard
+                    st.rerun()
+
+    # --- Delete ---
+    elif tool_choice == "Delete Data":
+        st.write("🗑 Delete tweets from DB")
+        sentiments = ["All"] + sorted(df_all["sentiment"].unique())
+        sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0, key="del_sent")
+        langs_available = sorted([l for l in df_all["language"].unique() if l != "unknown"])
+        lang_options = ["All"] + langs_available
+        lang_choice = st.selectbox("Filter by Language", options=lang_options, index=0, key="del_lang")
+        df_filtered = df_all.copy()
+        if sentiment_choice != "All":
+            df_filtered = df_filtered[df_filtered["sentiment"] == sentiment_choice]
+        if lang_choice != "All":
+            df_filtered = df_filtered[df_filtered["language"] == lang_choice]
+        st.write("📊 Preview of Data (with ID + Source)")
+        st.dataframe(df_filtered[["id", "source_file", "language", "sentiment", "text", "translated_tweet"]].head(20))
+        ids_to_delete = st.multiselect("Select rows by ID to delete", df_filtered["id"].tolist())
+        if st.button("Delete Selected Rows") and ids_to_delete:
+            delete_rows_by_ids(ids_to_delete)
+            st.session_state.df = load_tweets()
+            st.success(f"✅ Deleted {len(ids_to_delete)} rows.")
+        sources = df_all["source_file"].dropna().unique().tolist()
+        if sources:
+            source_choice = st.selectbox("Delete by Source File", ["None"] + sources, key="del_source")
+            if source_choice != "None" and st.button("Delete All from Source"):
+                delete_rows_by_source(source_choice)
+                st.session_state.df = load_tweets()
+                st.success(f"✅ Deleted all rows from source: {source_choice}")
