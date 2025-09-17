@@ -248,4 +248,4 @@ with tabs[3]:
     df_all = st.session_state.df.copy()
 
     # --- Upload ---
-    if tool_choice == "Upload Data_
+    if tool_choice == "Upload Data
