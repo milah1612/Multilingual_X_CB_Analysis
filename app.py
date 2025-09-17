@@ -434,7 +434,7 @@ with tabs[3]:
 
 # --- Upload ---
 elif tool_choice == "Upload Data":
-    st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
+   st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
     uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
     if uploaded_file is not None:
         if uploaded_file.name.endswith(".csv"):
