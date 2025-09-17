@@ -433,7 +433,7 @@ with tabs[3]:
             st.info("⚠️ No data matches your filter.")
 
 # --- Upload ---
-elif tool_choice == "Upload Data":
+if tool_choice == "Upload Data":
    st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
     uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
     if uploaded_file is not None:
