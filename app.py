@@ -485,7 +485,7 @@ with tabs[3]:
 
 
     # --- Delete ---
-elif tool_choice == "Delete Data":
+  elif tool_choice == "Delete Data":
     st.write("🗑 Delete tweets from DB")
     sentiments = ["All"] + sorted(df_all["sentiment"].unique())
     sentiment_choice = st.selectbox("Filter by Sentiment", options=sentiments, index=0, key="del_sent")
