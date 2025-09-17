@@ -482,7 +482,7 @@ with tabs[3]:
                     st.success("✅ Uploaded data analyzed and saved!")
                     st.write("📊 Preview of Uploaded Data")
                     st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
-                    st.rerun()   # ✅ refresh only after upload
+                    
 
     # --- Delete ---
     elif tool_choice == "Delete Data":
