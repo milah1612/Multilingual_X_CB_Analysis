@@ -432,60 +432,59 @@ with tabs[3]:
         else:
             st.info("⚠️ No data matches your filter.")
 
-# --- Upload ---
-if tool_choice == "Upload Data":
-   st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
-    uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
-    if uploaded_file is not None:
-        if uploaded_file.name.endswith(".csv"):
-            new_df = pd.read_csv(uploaded_file)
-        else:
-            new_df = pd.read_excel(uploaded_file)
+    # --- Upload ---
+    elif tool_choice == "Upload Data":
+        st.write("📤 Upload CSV/XLSX (must contain a 'text' column)")
+        uploaded_file = st.file_uploader("Upload File", type=["csv", "xlsx"])
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith(".csv"):
+                new_df = pd.read_csv(uploaded_file)
+            else:
+                new_df = pd.read_excel(uploaded_file)
 
-        if "text" not in new_df.columns:
-            st.error("❌ File must contain 'text' column")
-        else:
-            results = []
-            for _, row in new_df.iterrows():
-                raw_text = str(row["text"]).strip()
-                if not raw_text:
-                    continue
-                model_cleaned = clean_for_model(raw_text)
-                eda_cleaned = clean_for_eda(raw_text)
+            if "text" not in new_df.columns:
+                st.error("❌ File must contain 'text' column")
+            else:
+                results = []
+                for _, row in new_df.iterrows():
+                    raw_text = str(row["text"]).strip()
+                    if not raw_text:
+                        continue
+                    model_cleaned = clean_for_model(raw_text)
+                    eda_cleaned = clean_for_eda(raw_text)
 
-                # Predict sentiment
-                if "binary_label" in new_df.columns and not pd.isna(row.get("binary_label", None)):
-                    label = int(row["binary_label"])
-                    sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
-                else:
-                    label, _ = predict(model_cleaned)
-                    sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+                    # Predict sentiment
+                    if "binary_label" in new_df.columns and not pd.isna(row.get("binary_label", None)):
+                        label = int(row["binary_label"])
+                        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
+                    else:
+                        label, _ = predict(model_cleaned)
+                        sentiment = "Cyberbullying" if label == 1 else "Non Cyberbullying"
 
-                # Language detection + mapping
-                lang_code = detect_language(raw_text)
-                lang = LANG_MAP.get(lang_code, "unknown")
+                    # Language detection + mapping
+                    lang_code = detect_language(raw_text)
+                    lang = LANG_MAP.get(lang_code, "unknown")
 
-                # Translation
-                translated = safe_translate(raw_text, lang_code, context="upload")
+                    # Translation
+                    translated = safe_translate(raw_text, lang_code, context="upload")
 
-                # Insert into DB
-                new_row = insert_tweet(raw_text, lang, label, sentiment,
-                                       model_cleaned, eda_cleaned, translated,
-                                       source_file=f"upload:{uploaded_file.name}")
-                results.append(new_row)
+                    # Insert into DB
+                    new_row = insert_tweet(raw_text, lang, label, sentiment,
+                                           model_cleaned, eda_cleaned, translated,
+                                           source_file=f"upload:{uploaded_file.name}")
+                    results.append(new_row)
 
-            if results:
-                new_data = pd.concat(results, ignore_index=True)
-                st.session_state.df = pd.concat([new_data, st.session_state.df], ignore_index=True)
+                if results:
+                    new_data = pd.concat(results, ignore_index=True)
+                    st.session_state.df = pd.concat([new_data, st.session_state.df], ignore_index=True)
 
-                # ✅ Show preview immediately
-                st.success("✅ Uploaded data analyzed and saved!")
-                st.write("📊 Preview of Uploaded Data")
-                st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
+                    # ✅ Show preview immediately
+                    st.success("✅ Uploaded data analyzed and saved!")
+                    st.write("📊 Preview of Uploaded Data")
+                    st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
 
-                # ✅ Auto-refresh main dashboard
-                st.rerun()
-
+                    # ✅ Auto-refresh main dashboard
+                    st.rerun()
 
     # --- Delete ---
     elif tool_choice == "Delete Data":
@@ -514,6 +513,7 @@ if tool_choice == "Upload Data":
                 delete_rows_by_source(source_choice)
                 st.session_state.df = load_tweets()
                 st.success(f"✅ Deleted all rows from source: {source_choice}")
+
 
 # ==============================
 # Sidebar - Single Tweet Analysis
