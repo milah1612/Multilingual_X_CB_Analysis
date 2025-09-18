@@ -412,9 +412,11 @@ with tabs[3]:
             df_filtered["timestamp"] = pd.to_datetime(df_filtered["timestamp"], errors="coerce")
             if not df_filtered["timestamp"].isna().all():
                 min_date, max_date = df_filtered["timestamp"].min(), df_filtered["timestamp"].max()
-                date_range = st.date_input("Select Date Range",
-                                           value=(min_date.date(), max_date.date()),
-                                           min_value=min_date.date(), max_value=max_date.date())
+                date_range = st.date_input(
+                    "Select Date Range",
+                    value=(min_date.date(), max_date.date()),
+                    min_value=min_date.date(), max_value=max_date.date()
+                )
                 df_filtered = df_filtered[
                     (df_filtered["timestamp"].dt.date >= date_range[0]) &
                     (df_filtered["timestamp"].dt.date <= date_range[1])
@@ -446,6 +448,10 @@ with tabs[3]:
                 st.error("❌ File must contain 'text' column")
             else:
                 results = []
+
+                # 🚨 Overwrite previous uploads from same file
+                delete_rows_by_source(f"upload:{uploaded_file.name}")
+
                 for _, row in new_df.iterrows():
                     raw_text = str(row["text"]).strip()
                     if not raw_text:
@@ -469,9 +475,11 @@ with tabs[3]:
                     translated = safe_translate(raw_text, lang_code, context="upload")
 
                     # Insert into DB
-                    new_row = insert_tweet(raw_text, lang, label, sentiment,
-                                           model_cleaned, eda_cleaned, translated,
-                                           source_file=f"upload:{uploaded_file.name}")
+                    new_row = insert_tweet(
+                        raw_text, lang, label, sentiment,
+                        model_cleaned, eda_cleaned, translated,
+                        source_file=f"upload:{uploaded_file.name}"
+                    )
                     results.append(new_row)
 
                 if results:
@@ -479,7 +487,7 @@ with tabs[3]:
                     st.session_state.df = load_tweets()
 
                     # ✅ Show preview
-                    st.success("✅ Uploaded data analyzed and saved!")
+                    st.success("✅ Uploaded data analyzed and saved! (Previous data from this file was overwritten)")
                     st.write("📊 Preview of Uploaded Data")
                     new_data = pd.concat(results, ignore_index=True)
                     st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
