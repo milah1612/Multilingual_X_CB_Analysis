@@ -484,6 +484,9 @@ with tabs[3]:
                     new_data = pd.concat(results, ignore_index=True)
                     st.dataframe(new_data[["language", "sentiment", "text", "translated_tweet"]].head(10))
 
+                    # ✅ Trigger one-time refresh
+                    st.session_state.uploaded_refresh = True
+
     # --- Delete ---
     elif tool_choice == "Delete Data":
         st.write("🗑 Delete tweets from DB")
@@ -517,6 +520,12 @@ with tabs[3]:
                 st.session_state.df = load_tweets()
                 st.success(f"✅ Deleted all rows from source: {source_choice}")
                 st.rerun()   # ✅ refresh after source delete
+
+# 🔄 One-time refresh handler for upload
+if st.session_state.get("uploaded_refresh", False):
+    st.session_state.uploaded_refresh = False  # reset flag
+    st.rerun()
+
 
 
 # ==============================
