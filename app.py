@@ -260,7 +260,7 @@ def render_paginated_table(df, key_prefix, columns=None, rows_per_page=20, selec
 # Dashboard Layout
 # ==============================
 st.set_page_config(page_title="Cyberbullying Dashboard", layout="wide")
-st.markdown("<h1 style='text-align: center;'>🚨 SENTIMENT ANALYSIS DASHBOARD</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🚨 Multilingual Cyberbullying Detection Dashboard</h1>", unsafe_allow_html=True)
 
 tabs = st.tabs(["All 🌍", "Cyberbullying 🚨", "Non-Cyberbullying 🙂", "Tools 🛠️"])
 
