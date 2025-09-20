@@ -6,7 +6,7 @@ This repository contains the deployment files for multilingual cyberbullying det
 The dataset used is the CardiffNLP Tweet Sentiment Multilingual dataset, which is publicly available on Hugging Face:
 👉 CardiffNLP/tweet_sentiment_multilingual
 
-A small processed sample (tweet_data.csv) is included in this repository to support the deployed application.
+The processed sample (tweet_data.csv) is included in this repository to support the deployed application.
 
 #Tools
 
